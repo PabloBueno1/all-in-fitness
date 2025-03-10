@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.database import get_db
@@ -14,9 +14,12 @@ from app.schemas import (
     UserCreate, UserLogin,
     MealFoodItemBase, UpdateFoodItemBase,
 )
-from app.usda_api import search_foods_with_cache, fetch_usda_foods, fetch_usda_foods_raw
+from app.usda_api import fetch_usda_foods, fetch_usda_foods_raw
+from app.wger_api import fetch_wger_exercises
 from app.auth import get_password_hash, verify_password, create_access_token, get_current_user
 from fastapi.security import OAuth2PasswordRequestForm
+from typing import List
+from app.routes import router
 
 router = APIRouter()
 
@@ -45,7 +48,7 @@ def login_for_access_token(user: UserLogin, db: Session = Depends(get_db)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 # FOR OAUTH TESTING
-# @router.post("/token")
+@router.post("/token")
 # async def login_for_access_token(
 #     db: Session = Depends(get_db),
 #     form_data: OAuth2PasswordRequestForm = Depends()  # Used for Swagger UI (OAuth2)
@@ -92,40 +95,92 @@ def create_workout(workout: WorkoutCreate, current_user: User = Depends(get_curr
 def get_workouts(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return db.query(Workout).filter(Workout.user_id == current_user.id).all()
 
-@router.delete("/workouts/{workout_id}")
-def delete_workout(workout_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@router.delete("/workouts/{workout_id}/logs")
+def delete_workout_logs(
+    workout_id: int, 
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     # Ensure the workout belongs to the current user
     workout = db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == current_user.id).first()
-    
     if not workout:
         raise HTTPException(status_code=400, detail="Invalid workout_id or unauthorized")
 
-    # Delete the workout and all associated exercises
-    db.query(Exercise).filter(Exercise.workout_id == workout_id).delete()
-    db.delete(workout)
+    # Delete all exercise logs for exercises in this workout
+    logs_to_delete = (
+        db.query(ExerciseLog)
+        .join(Exercise, Exercise.id == ExerciseLog.exercise_id)
+        .filter(Exercise.workout_id == workout_id)
+    )
+    logs_to_delete.delete(synchronize_session=False)
     db.commit()
+    
+    return {"message": "Exercise logs deleted successfully"}
 
-    return {"message": "Workout deleted successfully"}
+@router.delete("/workouts/{workout_id}/exercises")
+def delete_workout_exercises(
+    workout_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Ensure the workout belongs to the current user
+    workout = db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == current_user.id).first()
+    if not workout:
+        raise HTTPException(status_code=400, detail="Invalid workout_id or unauthorized")
+
+    # Delete all exercises in the workout
+    db.query(Exercise).filter(Exercise.workout_id == workout_id).delete(synchronize_session=False)
+    db.commit()
+    
+    return {"message": "Workout exercises deleted successfully"}
+
+@router.delete("/workouts/{workout_id}")
+def delete_workout(
+    workout_id: int, 
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    # Ensure the workout belongs to the current user
+    workout = db.query(Workout).filter(Workout.id == workout_id, Workout.user_id == current_user.id).first()
+    if not workout:
+        raise HTTPException(status_code=400, detail="Invalid workout_id or unauthorized")
+
+    try:
+        # First delete all exercise logs
+        logs_to_delete = (
+            db.query(ExerciseLog)
+            .join(Exercise, Exercise.id == ExerciseLog.exercise_id)
+            .filter(Exercise.workout_id == workout_id)
+        )
+        logs_to_delete.delete(synchronize_session=False)
+
+        # Then delete all exercises
+        db.query(Exercise).filter(Exercise.workout_id == workout_id).delete(synchronize_session=False)
+
+        # Finally delete the workout
+        db.delete(workout)
+        db.commit()
+
+        return {"message": "Workout deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        print(f"Error deleting workout: {e}")
+        raise HTTPException(status_code=500, detail="Error deleting workout")
 
 
 # EXERCISE TYPES
 @router.post("/exercise_types", response_model=ExerciseTypeResponse)
-def create_exercise(exercise: ExerciseTypeCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_exercise_type(
+    exercise: ExerciseTypeCreate, 
+    db: Session = Depends(get_db)
+):
     # Check if exercise name already exists
     existing_exercise = db.query(ExerciseTypes).filter(ExerciseTypes.name == exercise.name).first()
     if existing_exercise:
         raise HTTPException(status_code=400, detail="Exercise name already exists")
 
-    # If created via frontend, always set `is_predefined=True`
-    if exercise.is_predefined is None:
-        exercise.is_predefined = True  
-
-    # Create new exercise
-    new_exercise = ExerciseTypes(
-        name=exercise.name,
-        is_predefined=exercise.is_predefined,
-        user_id=current_user.id,
-    )
+    # Create new exercise (is_predefined defaults to False for user-created exercises)
+    new_exercise = ExerciseTypes(**exercise.dict())
     db.add(new_exercise)
     db.commit()
     db.refresh(new_exercise)
@@ -133,11 +188,10 @@ def create_exercise(exercise: ExerciseTypeCreate, current_user: User = Depends(g
     return new_exercise
 
 
-@router.get("/exercise_types")
-def get_exercise_types(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return db.query(ExerciseTypes).filter(
-        (ExerciseTypes.user_id == current_user.id) | (ExerciseTypes.is_predefined == True)
-    ).all()
+@router.get("/exercise_types", response_model=list[ExerciseTypeResponse])
+def get_exercise_types(db: Session = Depends(get_db)):
+    # Return all exercises (both predefined and user-created)
+    return db.query(ExerciseTypes).all()
 
 
 # EXERCISES
@@ -147,6 +201,19 @@ def create_exercise_entry(exercise: ExerciseCreate, current_user: User = Depends
     workout = db.query(Workout).filter(Workout.id == exercise.workout_id, Workout.user_id == current_user.id).first()
     if not workout:
         raise HTTPException(status_code=400, detail="Invalid workout_id or unauthorized")
+
+    # Check if this exercise type is already in the workout
+    existing_exercise = (
+        db.query(Exercise)
+        .filter(
+            Exercise.workout_id == exercise.workout_id,
+            Exercise.exercise_id == exercise.exercise_id
+        )
+        .first()
+    )
+    
+    if existing_exercise:
+        raise HTTPException(status_code=409, detail="This exercise is already in your workout")
 
     new_exercise = Exercise(
         workout_id=exercise.workout_id,
@@ -197,7 +264,7 @@ def remove_exercise_from_workout(workout_id: int, exercise_id: int, current_user
     if not workout:
         raise HTTPException(status_code=400, detail="Invalid workout_id or unauthorized")
 
-    # Find and delete the specific exercise log entry
+    # Find the exercise
     exercise = db.query(Exercise).filter(
         Exercise.id == exercise_id,
         Exercise.workout_id == workout_id
@@ -206,10 +273,19 @@ def remove_exercise_from_workout(workout_id: int, exercise_id: int, current_user
     if not exercise:
         raise HTTPException(status_code=404, detail="Exercise not found in workout")
 
-    db.delete(exercise)
-    db.commit()
+    try:
+        # First delete all logs for this exercise
+        db.query(ExerciseLog).filter(ExerciseLog.exercise_id == exercise_id).delete(synchronize_session=False)
+        
+        # Then delete the exercise
+        db.delete(exercise)
+        db.commit()
 
-    return {"message": "Exercise removed from workout"}
+        return {"message": "Exercise and its logs removed from workout"}
+    except Exception as e:
+        db.rollback()
+        print(f"Error removing exercise: {e}")
+        raise HTTPException(status_code=500, detail="Error removing exercise from workout")
 
 
 # EXERCISE LOGS
@@ -471,13 +547,19 @@ def get_meal_food_items(meal_id: int, current_user: User = Depends(get_current_u
 
 #Delete Entire Meal
 @router.delete("/meals/{meal_id}")
-def delete_meal(meal_id: int, db: Session = Depends(get_db)):
-    meal = db.query(Meal).filter(Meal.id == meal_id).first()
+def delete_meal(
+    meal_id: int, 
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    meal = db.query(Meal).filter(
+        Meal.id == meal_id,
+        Meal.user_id == current_user.id  # Ensure meal belongs to user
+    ).first()
     if not meal:
-        raise HTTPException(status_code=404, detail="Meal not found.")
+        raise HTTPException(status_code=404, detail="Meal not found or unauthorized.")
     
     db.query(MealFoodItem).filter(MealFoodItem.meal_id == meal_id).delete(synchronize_session=False)
-
     db.delete(meal)
     db.commit()
     
@@ -497,4 +579,48 @@ def remove_food_from_meal(meal_id: int, food_id: int, db: Session = Depends(get_
     db.delete(meal_food)
     db.commit()
     return {"message": "Food item removed from meal"}
+
+
+# WGER API Integration
+@router.get("/search-exercises", response_model=List[ExerciseTypeResponse])
+def search_exercise_endpoint(query: str, db: Session = Depends(get_db)):
+    """
+    Search for exercises in both local database and wger API.
+    Returns combined results with preference for local exercises.
+    """
+    # Search local database first (like USDA pattern)
+    local_results = (
+        db.query(ExerciseTypes)
+        .filter(ExerciseTypes.name.ilike(f"%{query}%"))
+        .all()
+    )
+    
+    if local_results:
+        return local_results
+    
+    # If no local results, fetch from wger API (like USDA pattern)
+    wger_results = fetch_wger_exercises(query)
+    return wger_results
+
+
+# Update search endpoint to match food items pattern
+@router.get("/exercise_types/search", response_model=list[ExerciseTypeResponse])
+def search_exercise_types(query: str, db: Session = Depends(get_db)):
+    """
+    Search for exercises in both local database and wger API.
+    Returns combined results with preference for local exercises.
+    """
+    # Search local database first (like USDA pattern)
+    local_results = (
+        db.query(ExerciseTypes)
+        .filter(ExerciseTypes.name.ilike(f"%{query}%"))
+        .all()
+    )
+    
+    if local_results:
+        return local_results
+    
+    # If no local results, fetch from wger API (like USDA pattern)
+    wger_results = fetch_wger_exercises(query)
+    return wger_results
 

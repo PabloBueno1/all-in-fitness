@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:async'; // Add Timer import
 
 class MealsPage extends StatefulWidget {
   const MealsPage({super.key});
@@ -16,6 +17,8 @@ class _MealsPageState extends State<MealsPage> {
   Map<int, List> mealFoodItems = {};
   Map<int, String> mealSearchQueries = {}; // Meal-specific search text
   Map<int, bool> isSearchingMeal = {}; // For tracking search status per meal
+  Map<int, Timer?> _searchDebounceTimers = {}; // Add debounce timers map
+  Map<int, Future<List<Map<String, dynamic>>>> _searchFutures = {}; // Store search futures
 
   final String searchApiUrl = 'http://localhost:8000/food_items/search';
   final String postApiUrl = 'http://localhost:8000/food_items';
@@ -24,6 +27,15 @@ class _MealsPageState extends State<MealsPage> {
   void initState() {
     super.initState();
     _fetchMeals();
+  }
+
+  @override
+  void dispose() {
+    // Cancel all active timers
+    for (var timer in _searchDebounceTimers.values) {
+      timer?.cancel();
+    }
+    super.dispose();
   }
 
   /// ✅ Fetch Meals
@@ -241,13 +253,112 @@ class _MealsPageState extends State<MealsPage> {
     }
   }
 
+  /// Update meal details
+  Future<void> _updateMeal(int mealId, String name, String date) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String token = prefs.getString('token') ?? '';
+
+    final requestBody = {
+      'name': name,
+      'date': date,
+    };
+    print('Sending update request with body: $requestBody');
+
+    try {
+      final response = await http.patch(
+        Uri.parse('http://localhost:8000/meals/$mealId'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(requestBody),
+      );
+
+      if (response.statusCode == 200) {
+        _fetchMeals(); // Refresh the meals list
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Meal updated successfully!")),
+        );
+      } else {
+        print("Failed to update meal: ${response.statusCode}");
+        print("Response body: ${response.body}");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to update meal: ${response.body}")),
+        );
+      }
+    } catch (e) {
+      print("Error during meal update: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("An error occurred while updating the meal.")),
+      );
+    }
+  }
+
+  void _showEditMealDialog(Map meal) {
+    final nameController = TextEditingController(text: meal['name']);
+    final dateController = TextEditingController(text: meal['date']);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Meal'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(labelText: 'Meal Name'),
+              ),
+              TextField(
+                controller: dateController,
+                decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
+                onTap: () async {
+                  final DateTime? picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.tryParse(meal['date']) ?? DateTime.now(),
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (picked != null) {
+                    dateController.text = picked.toIso8601String().split('T')[0];
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              _updateMeal(
+                meal['id'],
+                nameController.text,
+                dateController.text,
+              );
+              Navigator.pop(context);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Meals")),
       body: Column(
         children: [
-          // Buttons at the top
+          const SizedBox(height: 20),
+          const Text("Your Meals:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
+          // Buttons for Creating Meal & Food
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Row(
@@ -257,21 +368,25 @@ class _MealsPageState extends State<MealsPage> {
                   onPressed: () async {
                     final result = await Navigator.pushNamed(context, '/create-meal');
                     if (result == true) {
-                      _fetchMeals(); // Refresh meals list when returning
+                      _fetchMeals();
                     }
                   },
                   child: const Text("Create Meal"),
                 ),
                 ElevatedButton(
                   onPressed: () async {
-                    await Navigator.pushNamed(context, '/add-food');
+                    final result = await Navigator.pushNamed(context, '/add-food');
+                    if (result == true) {
+                      _fetchMeals();
+                    }
                   },
-                  child: const Text("Manually Add Food"),
+                  child: const Text("Create Food"),
                 ),
               ],
             ),
           ),
-          // List of meals
+
+          // Meals List
           Expanded(
             child: ListView.builder(
               itemCount: meals.length,
@@ -280,20 +395,28 @@ class _MealsPageState extends State<MealsPage> {
                 final mealId = meal['id'];
 
                 return Card(
+                  elevation: 2,
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: ExpansionTile(
-                    title: Text(meal['name']),
-                    subtitle: Text("Date: ${meal['date']}"),
-                    leading: const Icon(Icons.restaurant_menu, color: Colors.blue),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
+                    title: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        Expanded(
+                          child: Text(meal['name']),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue),
+                          onPressed: () => _showEditMealDialog(meal),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.delete, color: Colors.red),
                           onPressed: () => _deleteMeal(mealId),
                         ),
-                        const Icon(Icons.expand_more, color: Colors.grey),
                       ],
                     ),
+                    subtitle: Text("Date: ${meal['date']}"),
+                    leading: const Icon(Icons.restaurant_menu, color: Colors.blue),
+                    trailing: const Icon(Icons.expand_more, color: Colors.grey),
                     childrenPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8.0),
@@ -349,10 +472,30 @@ class _MealsPageState extends State<MealsPage> {
                             suffixIcon: Icon(Icons.search),
                           ),
                           onChanged: (value) {
+                            // Cancel any existing timer for this meal
+                            _searchDebounceTimers[mealId]?.cancel();
+
                             setState(() {
                               mealSearchQueries[mealId] = value;
-                              isSearchingMeal[mealId] = value.isNotEmpty;
+                              if (value.isEmpty) {
+                                isSearchingMeal[mealId] = false;
+                                _searchFutures[mealId] = Future.value([]);
+                              } else {
+                                isSearchingMeal[mealId] = true;
+                              }
                             });
+
+                            if (value.isNotEmpty) {
+                              // Start a new timer
+                              _searchDebounceTimers[mealId] = Timer(const Duration(milliseconds: 500), () {
+                                if (mounted) {
+                                  setState(() {
+                                    // Store the future for this search
+                                    _searchFutures[mealId] = searchFoodItems(value);
+                                  });
+                                }
+                              });
+                            }
                           },
                         ),
                       ),
@@ -360,7 +503,7 @@ class _MealsPageState extends State<MealsPage> {
                       // 🔄 Meal-specific Search Results
                       isSearchingMeal[mealId] == true
                           ? FutureBuilder<List<Map<String, dynamic>>>(
-                              future: searchFoodItems(mealSearchQueries[mealId] ?? ''),
+                              future: _searchFutures[mealId] ?? Future.value([]),
                               builder: (context, snapshot) {
                                 if (snapshot.connectionState == ConnectionState.waiting) {
                                   return const CircularProgressIndicator();

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import date, datetime
 from typing import Optional, List
+from pydantic import validator
 
 class UserCreate(BaseModel):
     name: str
@@ -30,6 +31,9 @@ class WorkoutResponse(WorkoutBase):
 
 class ExerciseTypeBase(BaseModel):
     name: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    muscles: Optional[str] = None
     is_predefined: Optional[bool] = False
 
 class ExerciseTypeCreate(ExerciseTypeBase):
@@ -37,11 +41,9 @@ class ExerciseTypeCreate(ExerciseTypeBase):
 
 class ExerciseTypeResponse(ExerciseTypeBase):
     id: int
-    user_id: Optional[int]
 
     class Config:
         orm_mode = True
-
 
 class ExerciseBase(BaseModel):
     workout_id: int
@@ -102,6 +104,13 @@ class MealResponse(MealBase):
     class Config:
         orm_mode = True
 
+class MealUpdate(BaseModel):
+    name: str
+    date: date
+
+    class Config:
+        orm_mode = True
+
 class MealFoodItemBase(BaseModel):
     meal_id: int
     food_item_id: int
@@ -117,3 +126,11 @@ class MealFoodItemResponse(MealFoodItemBase):
 
 class UpdateFoodItemBase(BaseModel):
     quantity: float
+
+class WorkoutUpdate(BaseModel):
+    name: str
+    duration: int
+    date: date
+
+    class Config:
+        orm_mode = True

@@ -10,7 +10,10 @@ class CreateExercisePage extends StatefulWidget {
 
 class _CreateExercisePageState extends State<CreateExercisePage> {
   final TextEditingController _nameController = TextEditingController();
-  String? _errorMessage; // ✅ Store error messages
+  final TextEditingController _descriptionController = TextEditingController();
+  final TextEditingController _categoryController = TextEditingController();
+  final TextEditingController _musclesController = TextEditingController();
+  String? _errorMessage;
 
   Future<void> _createExercise() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -18,7 +21,10 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
 
     final Map<String, dynamic> payload = {
       "name": _nameController.text.trim(),
-      "is_predefined": true, // ✅ Always true when created from frontend
+      "description": _descriptionController.text.trim(),
+      "category": _categoryController.text.trim(),
+      "muscles": _musclesController.text.trim(),
+      "is_predefined": true,
     };
 
     final response = await http.post(
@@ -31,10 +37,10 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
     );
 
     if (response.statusCode == 200) {
-      Navigator.pop(context, true); // ✅ Return to previous page & refresh
+      Navigator.pop(context, true);
     } else {
       setState(() {
-        _errorMessage = json.decode(response.body)['detail']; // ✅ Display error
+        _errorMessage = json.decode(response.body)['detail'];
       });
     }
   }
@@ -43,27 +49,64 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Create Exercise")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
+
+              TextField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: "Exercise Name",
+                  hintText: "Enter the name of the exercise",
+                ),
               ),
 
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: "Exercise Name"),
-            ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _descriptionController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: "Description",
+                  hintText: "Enter a description of the exercise",
+                ),
+              ),
 
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _createExercise,
-              child: const Text("Create Exercise"),
-            ),
-          ],
+              const SizedBox(height: 16),
+              TextField(
+                controller: _categoryController,
+                decoration: const InputDecoration(
+                  labelText: "Category",
+                  hintText: "E.g., Strength, Cardio, Flexibility",
+                ),
+              ),
+
+              const SizedBox(height: 16),
+              TextField(
+                controller: _musclesController,
+                decoration: const InputDecoration(
+                  labelText: "Target Muscles",
+                  hintText: "E.g., Chest, Back, Legs",
+                ),
+              ),
+
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: _createExercise,
+                child: const Text("Create Exercise"),
+              ),
+            ],
+          ),
         ),
       ),
     );

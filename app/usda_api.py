@@ -13,7 +13,7 @@ USDA_API_KEY = os.getenv("USDA_API_KEY")
 USDA_SEARCH_URL = os.getenv("USDA_SEARCH_URL")
 
 # Function to fetch food data from USDA API
-def fetch_usda_foods(query: str, page_size: int = 5):
+def fetch_usda_foods(query: str, page_size: int = 15):
     params = {
         "api_key": USDA_API_KEY,
         "query": query,
@@ -86,8 +86,6 @@ def fetch_usda_foods(query: str, page_size: int = 5):
 
     return filtered_foods
 
-
-
 # #Raw food request
 def fetch_usda_foods_raw(query: str, page_size: int = 1):
     params = {
@@ -104,62 +102,3 @@ def fetch_usda_foods_raw(query: str, page_size: int = 1):
     else:
         print(f"USDA API Error: {response.status_code}")
         return {"error": f"USDA API returned status {response.status_code}"}
-
-# Function to search food (Insert Only First Instance & Format Name)
-def search_foods_with_cache(db: Session, query: str):
-    # 30-day cache expiry
-    cache_expiry = timedelta(days=30)
-    now = datetime.now(timezone.utc)
-
-    # ✅ Check local DB first
-    local_results = db.query(FoodItem).filter(FoodItem.name.ilike(f"%{query}%")).all()
-
-    # ✅ Filter out stale cached results
-    fresh_results = [
-        food for food in local_results
-        if food.last_updated and (now - food.last_updated) < cache_expiry
-    ]
-
-    # If we have fresh local data, return it
-    if fresh_results:
-        return fresh_results
-
-    # ✅ Fetch from USDA API
-    usda_results = fetch_usda_foods(query)
-
-    # ✅ Only insert the first instance if it doesn't exist
-    for food in usda_results:
-        raw_name = food.get("description")
-        formatted_name = raw_name.title()  # ✅ Convert to Title Case (e.g., "Rice")
-
-        nutrients = {n["nutrientName"]: n["value"] for n in food.get("foodNutrients", [])}
-
-        # Check if formatted name already exists
-        existing_food = db.query(FoodItem).filter(FoodItem.name == formatted_name).first()
-
-        if existing_food:
-            continue  # Skip duplicates
-
-        # Insert the first unique instance
-        new_food = FoodItem(
-            name=formatted_name,  # ✅ Use formatted name
-            serving_size=100,  # Default serving size
-            calories=nutrients.get("Energy", 0),
-            protein=nutrients.get("Protein", 0),
-            carbs=nutrients.get("Carbohydrate, by difference", 0),
-            fats=nutrients.get("Total lipid (fat)", 0),
-            is_custom=False,
-            last_updated=datetime.now(timezone.utc)
-        )
-        db.add(new_food)
-        break  # ✅ Stop after first insert
-
-    # ✅ Commit changes
-    try:
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        print(f"Error during commit: {e}")
-
-    # ✅ Re-query DB to return results
-    return db.query(FoodItem).filter(FoodItem.name.ilike(f"%{query}%")).all()

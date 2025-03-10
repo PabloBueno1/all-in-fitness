@@ -12,7 +12,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
 
     workouts = relationship("Workout", back_populates="user")
-    exercises = relationship("ExerciseTypes", back_populates="user")
+    meals = relationship("Meal", back_populates="user")
 
 
 class Workout(Base):
@@ -34,11 +34,10 @@ class ExerciseTypes(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False)
+    description = Column(String, nullable=True)
+    category = Column(String, nullable=True)
+    muscles = Column(String, nullable=True)
     is_predefined = Column(Boolean, default=False)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-
-    user = relationship("User", back_populates="exercises")
-
 
 class Exercise(Base):
     __tablename__ = "exercises"
@@ -86,7 +85,8 @@ class Meal(Base):
     date = Column(Date, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
-    # Relationship (Meals → MealFoodItems)
+    # Relationships
+    user = relationship("User", back_populates="meals")
     meal_food_items = relationship("MealFoodItem", back_populates="meal")
 
 class MealFoodItem(Base):

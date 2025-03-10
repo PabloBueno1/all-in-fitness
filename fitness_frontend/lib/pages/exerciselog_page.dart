@@ -17,17 +17,28 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
   late String exerciseName;
   final TextEditingController _weightController = TextEditingController();
   final TextEditingController _repsController = TextEditingController();
+  final TextEditingController _setsController = TextEditingController(text: '3');  // For new exercises
   late Future<List<Map<String, dynamic>>> _logsFuture;
+  late bool isNewExercise;
+  late Map<String, dynamic> exerciseToAdd;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
     workoutId = args['workoutId'];
-    exerciseId = args['exerciseId'];
-    exerciseName = args['exerciseName'];
-    setCap = args['setCap'];
-    _logsFuture = _fetchExerciseLogs(workoutId,exerciseId);
+    isNewExercise = args['isNewExercise'] ?? false;
+    
+    if (isNewExercise) {
+      exerciseToAdd = args['exerciseToAdd'];
+      exerciseName = exerciseToAdd['name'];
+      _logsFuture = Future.value([]);  // No logs for new exercise
+    } else {
+      exerciseId = args['exerciseId'];
+      exerciseName = args['exerciseName'];
+      setCap = args['setCap'];
+      _logsFuture = _fetchExerciseLogs(workoutId, exerciseId);
+    }
   }
 
   // Fetch Exercise Logs for a Workout & Exercise
@@ -64,7 +75,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
 
      if (currentLogs.length >= setCap) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("You’ve reached the maximum number of sets.")),
+        const SnackBar(content: Text("You've reached the maximum number of sets.")),
       );
       return;
     }
@@ -219,7 +230,69 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     );
   }
 
-@override
+  /// Add new exercise to workout with custom sets
+  Future<void> _addNewExerciseToWorkout() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String token = prefs.getString('token') ?? '';
+
+    int? sets = int.tryParse(_setsController.text);
+    if (sets == null || sets <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter a valid number of sets")),
+      );
+      return;
+    }
+
+    // First ensure exercise is in DB if from external API
+    if (exerciseToAdd['id'] == 0) {
+      final response = await http.post(
+        Uri.parse('http://localhost:8000/exercise_types'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(exerciseToAdd),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final savedExercise = json.decode(response.body);
+        exerciseToAdd = {...exerciseToAdd, 'id': savedExercise['id']};
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to save exercise.")),
+        );
+        return;
+      }
+    }
+
+    // Add exercise to workout
+    final response = await http.post(
+      Uri.parse('http://localhost:8000/exercises'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({
+        "workout_id": workoutId,
+        "exercise_id": exerciseToAdd['id'],
+        "sets": sets,
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      Navigator.pop(context, true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Exercise added successfully!")),
+      );
+    } else if (response.statusCode == 409) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("This exercise is already in your workout!")),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to add exercise.")),
+      );
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(exerciseName)),
@@ -228,73 +301,214 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Log New Set", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            TextField(
-              controller: _weightController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Weight (lbs)"),
-            ),
-            TextField(
-              controller: _repsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Reps"),
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton(
-              onPressed: () => _logSingleExerciseSet(workoutId, exerciseId),
-              child: const Text("Log Set"),
+            // Exercise Details Card
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      exerciseName,
+                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    if (isNewExercise) ...[
+                      Text(
+                        "Category: ${exerciseToAdd['category'] ?? 'Uncategorized'}",
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                      if ((exerciseToAdd['muscles'] ?? '').toString().isNotEmpty)
+                        Text(
+                          "Muscles: ${exerciseToAdd['muscles']}",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      if ((exerciseToAdd['description'] ?? '').toString().isNotEmpty)
+                        Text(
+                          "Description: ${exerciseToAdd['description']}",
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      isNewExercise 
+                          ? "Add to workout..."
+                          : "Sets: $setCap",
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: isNewExercise ? Colors.blue : Colors.green,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 20),
-            const Text("Logged Sets", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
+
+            if (isNewExercise) ...[
+              // Sets input for new exercise
+              TextField(
+                controller: _setsController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: "Number of Sets",
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Add button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _addNewExerciseToWorkout,
+                  icon: const Icon(Icons.add_circle_outline),
+                  label: const Text("Add to Workout"),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ] else ...[
+              // Progress indicator
+              FutureBuilder<List<Map<String, dynamic>>>(
                 future: _logsFuture,
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                  double progress = 0.0;
+                  if (snapshot.hasData) {
+                    progress = snapshot.data!.length / setCap;
                   }
-                  final logs = snapshot.data ?? [];
-
-                  if (logs.isEmpty) {
-                    return const Center(child: Text("No sets logged yet."));
-                  }
-
-                  return ListView.builder(
-                    itemCount: logs.length,
-                    itemBuilder: (context, index) {
-                      final log = logs[index];
-                      return ListTile(
-                        title: Text("Set ${log['set_number'] ?? 'N/A'}: ${log['weight'] ?? '0'} lbs x ${log['reps'] ?? '0'} reps"),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit, color: Colors.blue),
-                              onPressed: () {
-                                _editExerciseLog(log['id'], log['weight'], log['reps']);
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: () {
-                                final logId = log['id'];
-                                if (logId != null) {
-                                  _deleteExerciseLog(logId);
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text("Error: Log ID is missing")),
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                  return LinearProgressIndicator(
+                    value: progress,
+                    backgroundColor: Colors.grey[200],
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
                   );
                 },
               ),
-            ),
+              const SizedBox(height: 20),
+
+              // Existing exercise logging UI
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Log New Set",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _weightController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: "Weight (lbs)",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _repsController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: "Reps",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _logSingleExerciseSet(workoutId, exerciseId),
+                          icon: const Icon(Icons.add),
+                          label: const Text("Log Set"),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              const Text(
+                "Logged Sets",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: _logsFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    final logs = snapshot.data ?? [];
+
+                    if (logs.isEmpty) {
+                      return Center(
+                        child: Text(
+                          "No sets logged yet.\nPlanned sets: $setCap",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      itemCount: logs.length,
+                      itemBuilder: (context, index) {
+                        final log = logs[index];
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          child: ListTile(
+                            title: Text(
+                              "Set ${log['set_number'] ?? 'N/A'}: ${log['weight'] ?? '0'} lbs × ${log['reps'] ?? '0'} reps",
+                              style: const TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () {
+                                    _editExerciseLog(log['id'], log['weight'], log['reps']);
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () {
+                                    final logId = log['id'];
+                                    if (logId != null) {
+                                      _deleteExerciseLog(logId);
+                                    } else {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text("Error: Log ID is missing")),
+                                      );
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),

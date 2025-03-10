@@ -39,6 +39,20 @@ class _CreateWorkoutPageState extends State<CreateWorkoutPage> {
     }
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() {
+        _selectedDate = picked;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -57,21 +71,14 @@ class _CreateWorkoutPageState extends State<CreateWorkoutPage> {
               decoration: const InputDecoration(labelText: "Duration (minutes)"),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () async {
-                final pickedDate = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedDate,
-                  firstDate: DateTime(2000),
-                  lastDate: DateTime(2100),
-                );
-                if (pickedDate != null) {
-                  setState(() {
-                    _selectedDate = pickedDate;
-                  });
-                }
-              },
-              child: Text("Select Date: ${_selectedDate.toLocal()}".split(' ')[0]),
+            Row(
+              children: [
+                Text("Date: ${_selectedDate.toLocal()}".split(' ')[0]),
+                IconButton(
+                  icon: const Icon(Icons.calendar_today),
+                  onPressed: () => _selectDate(context),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             ElevatedButton(
