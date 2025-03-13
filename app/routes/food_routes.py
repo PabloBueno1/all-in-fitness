@@ -4,7 +4,8 @@ from sqlalchemy import func
 from app.database import get_db
 from app.models import FoodItem
 from app.schemas import FoodItemCreate, FoodItemResponse
-from app.usda_api import fetch_usda_foods, fetch_usda_foods_raw
+from app.usda_api import fetch_usda_foods, fetch_usda_foods_raw, fetch_food_by_barcode
+from app.auth import get_current_user
 
 router = APIRouter()
 
@@ -37,4 +38,15 @@ def search_food_items(query: str, db: Session = Depends(get_db)):
 
 @router.get("/usda/raw")
 def get_usda_raw_data(query: str):
-    return fetch_usda_foods_raw(query) 
+    return fetch_usda_foods_raw(query)
+
+@router.get("/food_items/scan/{barcode}", response_model=list[FoodItemResponse])
+async def scan_food_barcode(
+    barcode: str,
+    db: Session = Depends(get_db)
+):
+    usda_result = fetch_food_by_barcode(barcode)
+    if not usda_result:
+        return []
+        
+    return [usda_result] 

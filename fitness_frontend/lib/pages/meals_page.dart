@@ -349,6 +349,88 @@ class _MealsPageState extends State<MealsPage> {
     );
   }
 
+  Future<void> _showBarcodeInputDialog(BuildContext context, int mealId) {
+    final barcodeController = TextEditingController();
+    
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enter Barcode'),
+        content: TextField(
+          controller: barcodeController,
+          decoration: const InputDecoration(
+            labelText: 'Barcode Number',
+            hintText: 'Enter product barcode',
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.number,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (barcodeController.text.isNotEmpty) {
+                SharedPreferences prefs = await SharedPreferences.getInstance();
+                String token = prefs.getString('token') ?? '';
+
+                final response = await http.get(
+                  Uri.parse('http://localhost:8000/food_items/scan/${barcodeController.text}'),
+                  headers: {
+                    'Authorization': 'Bearer $token',
+                    'Content-Type': 'application/json',
+                  },
+                );
+
+                if (response.statusCode == 200) {
+                  final List<dynamic> results = json.decode(response.body);
+                  if (results.isNotEmpty) {
+                    final food = results[0];
+                    // Close the barcode dialog first
+                    Navigator.pop(context);
+                    
+                    // Navigate to food details page
+                    final result = await Navigator.pushNamed(
+                      context,
+                      '/food-details',
+                      arguments: {
+                        'food': food,
+                        'mealId': mealId,
+                      },
+                    );
+
+                    // Refresh meal food items if food was successfully added
+                    if (result == true) {
+                      _fetchMealFoodItems(mealId);
+                    }
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No food found with this barcode. Try another barcode or use search.'),
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                } else {
+                  print("Barcode search error: ${response.statusCode}, Body: ${response.body}");
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Error searching for food. Please try again.'),
+                      duration: Duration(seconds: 3),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Search'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -465,38 +547,52 @@ class _MealsPageState extends State<MealsPage> {
                       // 🔍 Search Bar Inside Meal
                       Padding(
                         padding: const EdgeInsets.all(12.0),
-                        child: TextField(
-                          decoration: const InputDecoration(
-                            labelText: "Search Food to Add",
-                            border: OutlineInputBorder(),
-                            suffixIcon: Icon(Icons.search),
-                          ),
-                          onChanged: (value) {
-                            // Cancel any existing timer for this meal
-                            _searchDebounceTimers[mealId]?.cancel();
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                decoration: const InputDecoration(
+                                  labelText: "Search Food to Add",
+                                  border: OutlineInputBorder(),
+                                  suffixIcon: Icon(Icons.search),
+                                ),
+                                onChanged: (value) {
+                                  // Cancel any existing timer for this meal
+                                  _searchDebounceTimers[mealId]?.cancel();
 
-                            setState(() {
-                              mealSearchQueries[mealId] = value;
-                              if (value.isEmpty) {
-                                isSearchingMeal[mealId] = false;
-                                _searchFutures[mealId] = Future.value([]);
-                              } else {
-                                isSearchingMeal[mealId] = true;
-                              }
-                            });
-
-                            if (value.isNotEmpty) {
-                              // Start a new timer
-                              _searchDebounceTimers[mealId] = Timer(const Duration(milliseconds: 500), () {
-                                if (mounted) {
                                   setState(() {
-                                    // Store the future for this search
-                                    _searchFutures[mealId] = searchFoodItems(value);
+                                    mealSearchQueries[mealId] = value;
+                                    if (value.isEmpty) {
+                                      isSearchingMeal[mealId] = false;
+                                      _searchFutures[mealId] = Future.value([]);
+                                    } else {
+                                      isSearchingMeal[mealId] = true;
+                                    }
                                   });
-                                }
-                              });
-                            }
-                          },
+
+                                  if (value.isNotEmpty) {
+                                    // Start a new timer
+                                    _searchDebounceTimers[mealId] = Timer(const Duration(milliseconds: 500), () {
+                                      if (mounted) {
+                                        setState(() {
+                                          // Store the future for this search
+                                          _searchFutures[mealId] = searchFoodItems(value);
+                                        });
+                                      }
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.qr_code_scanner),
+                              onPressed: () {
+                                _showBarcodeInputDialog(context, mealId);
+                              },
+                              tooltip: 'Scan Barcode',
+                            ),
+                          ],
                         ),
                       ),
 
