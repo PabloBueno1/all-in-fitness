@@ -9,3 +9,4 @@ python-jose[cryptography]
 fastapi-users
 requests
 python-dotenv
+httpx

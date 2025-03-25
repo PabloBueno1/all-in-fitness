@@ -10,6 +10,8 @@ import 'pages/createworkout_page.dart';
 import 'pages/createexercise_page.dart';
 import 'pages/exerciselog_page.dart';
 import 'pages/fooddetail_page.dart';
+import 'pages/goals_page.dart';
+import 'pages/creategoal_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -30,6 +32,8 @@ class MyApp extends StatelessWidget {
       routes: {
         '/': (context) => const LoginPage(),
         '/dashboard': (context) => const DashboardPage(),
+        '/goals': (context) => const GoalsPage(),
+        '/create-goal': (context) => const CreateGoalPage(),
         '/signup': (context) => SignUpPage(),
         '/meals': (context) => const MealsPage(),
         '/workouts': (context) => const WorkoutsPage(),

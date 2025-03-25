@@ -3,15 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async'; // Add Timer import
+import '../widgets/bottom_nav_bar.dart';
+import '../mixins/navigation_mixin.dart';
 
 class MealsPage extends StatefulWidget {
   const MealsPage({super.key});
 
   @override
-  _MealsPageState createState() => _MealsPageState();
+  State<MealsPage> createState() => _MealsPageState();
 }
 
-class _MealsPageState extends State<MealsPage> {
+class _MealsPageState extends State<MealsPage> with NavigationMixin {
   List meals = [];
   List foodItems = [];
   Map<int, List> mealFoodItems = {};
@@ -672,6 +674,10 @@ class _MealsPageState extends State<MealsPage> {
             ),
           ),
         ],
+      ),
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: getCurrentIndex(context),
+        onTap: (index) => handleNavigation(index, context),
       ),
     );
   }

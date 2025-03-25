@@ -3,15 +3,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async'; // Add Timer import
+import '../widgets/bottom_nav_bar.dart';
+import '../mixins/navigation_mixin.dart';
 
 class WorkoutsPage extends StatefulWidget {
   const WorkoutsPage({super.key});
 
   @override
-  _WorkoutsPageState createState() => _WorkoutsPageState();
+  State<WorkoutsPage> createState() => _WorkoutsPageState();
 }
 
-class _WorkoutsPageState extends State<WorkoutsPage> {
+class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
   List workouts = [];
   List exerciseTypes = []; // Changed back to List like meals page
   Map<int, List> workoutExercises = {}; // Stores exercises for each workout
@@ -640,6 +642,10 @@ class _WorkoutsPageState extends State<WorkoutsPage> {
             ),
           ),
         ],
+      ),
+      bottomNavigationBar: BottomNavBar(
+        currentIndex: getCurrentIndex(context),
+        onTap: (index) => handleNavigation(index, context),
       ),
     );
   }

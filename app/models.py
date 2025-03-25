@@ -13,6 +13,7 @@ class User(Base):
 
     workouts = relationship("Workout", back_populates="user")
     meals = relationship("Meal", back_populates="user")
+    goals = relationship("Goal", back_populates="user")
 
 
 class Workout(Base):
@@ -100,3 +101,19 @@ class MealFoodItem(Base):
     # Relationships
     meal = relationship("Meal", back_populates="meal_food_items")
     food_item = relationship("FoodItem")
+
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    goal_type = Column(String, nullable=False)  # 'weight', 'calories', 'protein', 'carbs', 'fats'
+    target_value = Column(Float, nullable=False)
+    current_value = Column(Float, nullable=True)
+    start_date = Column(Date, nullable=False)
+    target_date = Column(Date, nullable=True)
+    is_completed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="goals")

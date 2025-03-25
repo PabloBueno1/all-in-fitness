@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from datetime import date, datetime
 from typing import Optional, List
 from pydantic import validator
@@ -134,3 +134,41 @@ class WorkoutUpdate(BaseModel):
 
     class Config:
         orm_mode = True
+
+class GoalBase(BaseModel):
+    goal_type: str  # 'weight', 'calories', 'protein', 'carbs', 'fats'
+    target_value: float
+    current_value: Optional[float] = None
+    start_date: date
+    target_date: Optional[date] = None
+
+class GoalCreate(GoalBase):
+    @validator('current_value')
+    def validate_current_value(cls, v, values):
+        if 'goal_type' in values and values['goal_type'] == 'weight' and v is None:
+            raise ValueError('Current value is required for weight goals')
+        return v
+
+class GoalUpdate(BaseModel):
+    target_value: Optional[float] = None
+    current_value: Optional[float] = None
+    target_date: Optional[date] = None
+    is_completed: Optional[bool] = None
+
+class Goal(GoalBase):
+    id: int
+    user_id: int
+    is_completed: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class GoalProgress(BaseModel):
+    goal_id: int
+    progress_percentage: float
+    remaining_days: Optional[int]
+    current_value: float
+    target_value: float
+    goal_type: str

@@ -47,7 +47,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     String token = prefs.getString('token') ?? '';
 
     final response = await http.get(
-      Uri.parse('http://localhost:8000/exercise_log/$workoutId/$exerciseId'),
+      Uri.parse('http://localhost:8000/exercise_logs/$workoutId/$exerciseId'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -91,7 +91,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     }
 
     final response = await http.post(
-      Uri.parse('http://localhost:8000/exercise_log'),
+      Uri.parse('http://localhost:8000/exercise_logs'),
       headers: {
         'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
@@ -127,7 +127,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     String token = prefs.getString('token') ?? '';
 
     final response = await http.delete(
-      Uri.parse('http://localhost:8000/exercise_log/$logId'),  // Only log_id is needed
+      Uri.parse('http://localhost:8000/exercise_logs/$logId'),
       headers: {'Authorization': 'Bearer $token'},
     );
 
@@ -152,11 +152,14 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
   }
 
   // Edit Exercise Log
-  Future<void> _editExerciseLog(int logId, int initialWeight, int initialReps) async {
-    final TextEditingController weightController = TextEditingController(text: initialWeight.toString());
-    final TextEditingController repsController = TextEditingController(text: initialReps.toString());
+  void _showEditLogDialog(Map<String, dynamic> log) {
+    final TextEditingController weightController = TextEditingController(text: log['weight'].toString());
+    final TextEditingController repsController = TextEditingController(text: log['reps'].toString());
+    final int logId = log['id'];
+    final int initialWeight = log['weight'];
+    final int initialReps = log['reps'];
 
-    await showDialog(
+    showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Edit Set'),
@@ -166,12 +169,12 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
             TextField(
               controller: weightController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Weight (lbs)"),
+              decoration: const InputDecoration(labelText: 'Weight (lbs)'),
             ),
             TextField(
               controller: repsController,
               keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Reps"),
+              decoration: const InputDecoration(labelText: 'Reps'),
             ),
           ],
         ),
@@ -201,7 +204,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
               if (newReps != initialReps) updateData['reps'] = newReps;
 
               final response = await http.patch(
-                Uri.parse('http://localhost:8000/exercise_log/$logId'),
+                Uri.parse('http://localhost:8000/exercise_logs/$logId'),
                 headers: {
                   'Authorization': 'Bearer $token',
                   'Content-Type': 'application/json',
@@ -483,7 +486,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
                                 IconButton(
                                   icon: const Icon(Icons.edit, color: Colors.blue),
                                   onPressed: () {
-                                    _editExerciseLog(log['id'], log['weight'], log['reps']);
+                                    _showEditLogDialog(log);
                                   },
                                 ),
                                 IconButton(
