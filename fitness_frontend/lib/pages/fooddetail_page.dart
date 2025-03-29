@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../constants/colors.dart';
 
 class FoodDetailsPage extends StatefulWidget {
   const FoodDetailsPage({super.key});
@@ -14,6 +16,7 @@ class _FoodDetailsPageState extends State<FoodDetailsPage> {
   late Map<String, dynamic> food;
   late int mealId;
   late TextEditingController quantityController;
+  bool _isLoading = false;
   
   double totalCalories = 0;
   double totalProtein = 0;
@@ -32,7 +35,19 @@ class _FoodDetailsPageState extends State<FoodDetailsPage> {
     _updateMacros(initialQuantity);
   }
 
-  /// ✅ Update macro values when quantity changes
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
+        backgroundColor: isError ? CupertinoColors.destructiveRed : kPrimaryBlue,
+      ),
+    );
+  }
+
+  /// Update macro values when quantity changes
   void _updateMacros(double quantity) {
     setState(() {
       double caloriesValue = food['calories_per_item'] ?? food['calories'] ?? 0;
@@ -44,101 +59,98 @@ class _FoodDetailsPageState extends State<FoodDetailsPage> {
     });
   }
 
-  /// ✅ Update food quantity in meal
+  /// Update food quantity in meal
   Future<void> _updateFoodQuantity() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String token = prefs.getString('token') ?? '';
-    double? quantity = double.tryParse(quantityController.text);
+    setState(() => _isLoading = true);
+    
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String token = prefs.getString('token') ?? '';
+      double? quantity = double.tryParse(quantityController.text);
 
-    if (token.isEmpty || quantity == null || quantity <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter a valid quantity.")),
-      );
-      return;
-    }
+      if (token.isEmpty || quantity == null || quantity <= 0) {
+        _showSnackBar("Enter a valid quantity.", isError: true);
+        return;
+      }
 
-    final response = await http.patch(
-      Uri.parse('http://localhost:8000/meal_food_items/$mealId/${food['food_id']}'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: json.encode({"quantity": quantity}),
-    );
+      final response = await http.patch(
+        Uri.parse('http://localhost:8000/meal_food_items/$mealId/${food['food_id']}'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({"quantity": quantity}),
+      );
 
-    if (response.statusCode == 200) {
-      Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Quantity updated successfully!")),
-      );
-    } else if (response.statusCode == 404) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Food is not in the meal!")),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to update quantity.")),
-      );
+      if (response.statusCode == 200) {
+        Navigator.pop(context, true);
+        _showSnackBar("Quantity updated successfully!");
+      } else if (response.statusCode == 404) {
+        _showSnackBar("Food is not in the meal!", isError: true);
+      } else {
+        _showSnackBar("Failed to update quantity.", isError: true);
+      }
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
-  /// When the user adds food from db we use foo[id] if it already exists we use food[food_id]
+  /// Add food to meal
   Future<void> _addFoodToMeal() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String token = prefs.getString('token') ?? '';
+    setState(() => _isLoading = true);
+    
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String token = prefs.getString('token') ?? '';
 
-    if (token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Authentication error: Please log in again.")),
-      );
-      return;
-    }
-
-    double? quantity = double.tryParse(quantityController.text);
-    if (quantity == null || quantity <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Enter a valid quantity.")),
-      );
-      return;
-    }
-    // ✅ If the food is USDA (id = 0), first save it to the DB
-    if (food['id'] == 0) {
-      final savedFood = await _addFoodToDB(food);
-      if (savedFood != null) {
-        food = savedFood; // ✅ Update food object with new database ID
-      } else {
-        return; // Stop if saving food failed
+      if (token.isEmpty) {
+        _showSnackBar("Authentication error: Please log in again.", isError: true);
+        return;
       }
-    }
-    final response = await http.post(
-      Uri.parse('http://localhost:8000/meal_food_items'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: json.encode({
-        "meal_id": mealId,
-        "food_item_id": food['id'],
-        "quantity": quantity,
-      }),
-    );
-    if (response.statusCode == 200) {
-      Navigator.pop(context, true); // ✅ Return `true` so MealsPage refreshes
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Food added successfully!")),
+
+      double? quantity = double.tryParse(quantityController.text);
+      if (quantity == null || quantity <= 0) {
+        _showSnackBar("Enter a valid quantity.", isError: true);
+        return;
+      }
+
+      // If the food is USDA (id = 0), first save it to the DB
+      if (food['id'] == 0) {
+        final savedFood = await _addFoodToDB(food);
+        if (savedFood != null) {
+          food = savedFood;
+        } else {
+          return;
+        }
+      }
+
+      final response = await http.post(
+        Uri.parse('http://localhost:8000/meal_food_items'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          "meal_id": mealId,
+          "food_item_id": food['id'],
+          "quantity": quantity,
+        }),
       );
-    } else if (response.statusCode == 422) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("This food is already added to the meal!")),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to add food.")),
-      );
+
+      if (response.statusCode == 200) {
+        Navigator.pop(context, true);
+        _showSnackBar("Food added successfully!");
+      } else if (response.statusCode == 422) {
+        _showSnackBar("This food is already added to the meal!", isError: true);
+      } else {
+        _showSnackBar("Failed to add food.", isError: true);
+      }
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
   
-  /// ✅ Save food to database if it comes from USDA (id = 0)
+  /// Save food to database if it comes from USDA (id = 0)
   Future<Map<String, dynamic>?> _addFoodToDB(Map<String, dynamic> food) async {
     final response = await http.post(
       Uri.parse('http://localhost:8000/food_items'),
@@ -149,76 +161,177 @@ class _FoodDetailsPageState extends State<FoodDetailsPage> {
     if (response.statusCode == 200 || response.statusCode == 201) {
       final savedFood = json.decode(response.body);
       return {
-        ...food, // ✅ Keep original food data
-        'id': savedFood['id'], // ✅ Update with new database ID
+        ...food,
+        'id': savedFood['id'],
       };
     } else {
-      print('❌ Failed to add food item to DB. Status: ${response.statusCode}');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error saving food to database.")),
-      );
+      _showSnackBar("Error saving food to database.", isError: true);
       return null;
     }
+  }
+
+  Widget _buildInfoCard(String title, String value) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CupertinoColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CupertinoColors.systemGrey5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: kSecondaryText,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(food['name'] ?? "Food Details")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("Serving Size: ${(food['serving_size'] ?? 0) > 0 ? '${food['serving_size']}g' : '1 serving'}"),
-            const SizedBox(height: 10),
-            Text("Calories: ${totalCalories.toStringAsFixed(2)} kcal"),
-            Text("Protein: ${totalProtein.toStringAsFixed(2)}g"),
-            Text("Carbs: ${totalCarbs.toStringAsFixed(2)}g"),
-            Text("Fats: ${totalFats.toStringAsFixed(2)}g"),
-            const SizedBox(height: 20),
-            TextField(
-              controller: quantityController,
-              keyboardType: TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: "Quantity"),
-              onChanged: (value) {
-                double? quantity = double.tryParse(value);
-                if (quantity != null && quantity > 0) {
-                  _updateMacros(quantity);
-                }
-              },
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _addFoodToMeal,
-                icon: const Icon(Icons.add_circle_outline),
-                label: const Text("Add to Meal"),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+      backgroundColor: kBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: const Icon(
+            CupertinoIcons.back,
+            color: kPrimaryBlue,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          food['name'] ?? "Food Details",
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildInfoCard(
+                  "Serving Size",
+                  (food['serving_size'] ?? 0) > 0 ? '${food['serving_size']}g' : '1 serving',
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildInfoCard(
+                        "Calories",
+                        "${totalCalories.toStringAsFixed(1)} kcal",
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildInfoCard(
+                        "Protein",
+                        "${totalProtein.toStringAsFixed(1)}g",
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildInfoCard(
+                        "Carbs",
+                        "${totalCarbs.toStringAsFixed(1)}g",
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildInfoCard(
+                        "Fats",
+                        "${totalFats.toStringAsFixed(1)}g",
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: CupertinoColors.systemGrey5),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Quantity",
+                        style: TextStyle(
+                          color: kSecondaryText,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      CupertinoTextField(
+                        controller: quantityController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        placeholder: "Enter quantity",
+                        onChanged: (value) {
+                          double? quantity = double.tryParse(value);
+                          if (quantity != null && quantity > 0) {
+                            _updateMacros(quantity);
+                          }
+                        },
+                        decoration: BoxDecoration(
+                          border: Border.all(color: CupertinoColors.systemGrey4),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 15),
-            SizedBox(
-              width: double.infinity, 
-              child: ElevatedButton.icon(
-                onPressed: _updateFoodQuantity,
-                icon: const Icon(Icons.update),
-                label: const Text("Update Quantity"),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 24),
+                if (_isLoading)
+                  const Center(child: CupertinoActivityIndicator())
+                else ...[
+                  CupertinoButton(
+                    color: kPrimaryBlue,
+                    onPressed: _addFoodToMeal,
+                    child: const Text("Add to Meal"),
                   ),
-                ),
-              ),
+                  const SizedBox(height: 12),
+                  CupertinoButton(
+                    color: CupertinoColors.systemGrey5,
+                    onPressed: _updateFoodQuantity,
+                    child: const Text(
+                      "Update Quantity",
+                      style: TextStyle(color: CupertinoColors.black),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

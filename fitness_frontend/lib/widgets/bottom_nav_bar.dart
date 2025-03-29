@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
+import '../constants/colors.dart';
 
 class BottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -12,30 +14,47 @@ class BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BottomNavigationBar(
-      type: BottomNavigationBarType.fixed,
-      currentIndex: currentIndex,
-      selectedItemColor: Theme.of(context).primaryColor,
-      unselectedItemColor: Colors.grey,
-      onTap: onTap,
-      items: const [
-        BottomNavigationBarItem(
-          icon: Icon(Icons.home),
-          label: 'Home',
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(
+            color: CupertinoColors.systemGrey6,
+            width: 0.5,
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.track_changes),
-          label: 'Goals',
+      ),
+      child: CupertinoTabBar(
+        currentIndex: currentIndex,
+        onTap: onTap,
+        activeColor: kPrimaryBlue,
+        inactiveColor: kSecondaryText,
+        backgroundColor: CupertinoColors.systemBackground.withOpacity(0.8),
+        iconSize: 24,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.house_fill),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.chart_bar_fill),
+            label: 'Goals',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.cart_fill),
+            label: 'Meals',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(CupertinoIcons.sportscourt_fill),
+            label: 'Workouts',
+          ),
+        ],
+        border: Border(
+          top: BorderSide(
+            color: CupertinoColors.systemGrey6,
+            width: 0.5,
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.restaurant_menu),
-          label: 'Meals',
-        ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.fitness_center),
-          label: 'Workouts',
-        ),
-      ],
+      ),
     );
   }
 } 

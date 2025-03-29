@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../constants/colors.dart';
 
 class CreateExercisePage extends StatefulWidget {
+  const CreateExercisePage({super.key});
+
   @override
   _CreateExercisePageState createState() => _CreateExercisePageState();
 }
@@ -37,7 +41,21 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
     );
 
     if (response.statusCode == 200) {
-      Navigator.pop(context, true);
+      showCupertinoDialog(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          content: const Text("Exercise created successfully!"),
+          actions: [
+            CupertinoDialogAction(
+              child: const Text('OK'),
+              onPressed: () {
+                Navigator.pop(context); // Dismiss dialog
+                Navigator.pop(context, true); // Return to workouts page
+              },
+            ),
+          ],
+        ),
+      );
     } else {
       setState(() {
         _errorMessage = json.decode(response.body)['detail'];
@@ -47,65 +65,112 @@ class _CreateExercisePageState extends State<CreateExercisePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Create Exercise")),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.red),
+    return CupertinoPageScaffold(
+      backgroundColor: kBackgroundColor,
+      navigationBar: const CupertinoNavigationBar(
+        backgroundColor: Colors.transparent,
+        border: null,
+        middle: Text(
+          'Create Exercise',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0),
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(color: CupertinoColors.destructiveRed),
+                    ),
+                  ),
+
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: CupertinoColors.systemGrey4),
+                  ),
+                  child: CupertinoTextField(
+                    controller: _nameController,
+                    placeholder: "Exercise Name",
+                    padding: const EdgeInsets.all(12),
+                    decoration: null,
                   ),
                 ),
 
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: "Exercise Name",
-                  hintText: "Enter the name of the exercise",
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: CupertinoColors.systemGrey4),
+                  ),
+                  child: CupertinoTextField(
+                    controller: _descriptionController,
+                    placeholder: "Description",
+                    padding: const EdgeInsets.all(12),
+                    maxLines: 3,
+                    decoration: null,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 16),
-              TextField(
-                controller: _descriptionController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: "Description",
-                  hintText: "Enter a description of the exercise",
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: CupertinoColors.systemGrey4),
+                  ),
+                  child: CupertinoTextField(
+                    controller: _categoryController,
+                    placeholder: "Category (e.g., Strength, Cardio, Flexibility)",
+                    padding: const EdgeInsets.all(12),
+                    decoration: null,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 16),
-              TextField(
-                controller: _categoryController,
-                decoration: const InputDecoration(
-                  labelText: "Category",
-                  hintText: "E.g., Strength, Cardio, Flexibility",
+                const SizedBox(height: 16),
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: CupertinoColors.systemGrey4),
+                  ),
+                  child: CupertinoTextField(
+                    controller: _musclesController,
+                    placeholder: "Target Muscles (e.g., Chest, Back, Legs)",
+                    padding: const EdgeInsets.all(12),
+                    decoration: null,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 16),
-              TextField(
-                controller: _musclesController,
-                decoration: const InputDecoration(
-                  labelText: "Target Muscles",
-                  hintText: "E.g., Chest, Back, Legs",
+                const SizedBox(height: 24),
+                CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  color: kPrimaryBlue,
+                  borderRadius: BorderRadius.circular(8),
+                  onPressed: _createExercise,
+                  child: const Text(
+                    "Create Exercise",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
-              ),
-
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _createExercise,
-                child: const Text("Create Exercise"),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

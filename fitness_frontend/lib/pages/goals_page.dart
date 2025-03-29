@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
+import '../constants/colors.dart';
 
 class GoalsPage extends StatefulWidget {
   const GoalsPage({super.key});
@@ -281,18 +283,46 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
     }
   }
 
+  List<Map<String, dynamic>> _getDailyGoals() {
+    final today = DateTime.now();
+    final todayStr = today.toIso8601String().split('T')[0];
+    
+    return goals.where((goal) {
+      final baseGoalType = goal['goal_type'].toString().split(':')[0];
+      return _dailyGoals.contains(baseGoalType.toLowerCase()) && 
+             goal['deadline'] == todayStr;
+    }).toList();
+  }
+
+  List<Map<String, dynamic>> _getNonDailyGoals() {
+    return goals.where((goal) {
+      final baseGoalType = goal['goal_type'].toString().split(':')[0];
+      return !_dailyGoals.contains(baseGoalType.toLowerCase());
+    }).toList()
+      ..sort((a, b) => a['deadline'].compareTo(b['deadline']));
+  }
+
   Widget _buildGoalCard(Map<String, dynamic> goal) {
     final isDaily = _dailyGoals.contains(goal['category'].toString().toLowerCase());
     final isWeightlifting = goal['goal_type'] == 'weightlifting';
     final isWeight = goal['category'] == 'weight';
     
-    // Calculate progress only for non-weight goals
     double progress = isWeight ? 0.0 : (goal['current_value'] / goal['target_value']).clamp(0.0, 1.0);
     bool isCompleted = isWeight ? false : progress >= 1.0;
 
-    return Card(
-      elevation: 4,
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -310,34 +340,28 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
                           Text(
                             _getGoalTitle(goal),
                             style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
                             ),
                           ),
                           if (isDaily) ...[
                             const SizedBox(width: 8),
-                            const Icon(
-                              Icons.refresh,
-                              size: 16,
-                              color: Colors.grey,
+                            Icon(
+                              CupertinoIcons.refresh,
+                              size: 14,
+                              color: Colors.grey[400],
                             ),
                           ],
                         ],
                       ),
-                      if (isWeightlifting)
+                      if (isWeightlifting || isDaily)
                         Text(
-                          'Weightlifting PR Goal',
+                          isWeightlifting ? 'Weightlifting PR Goal' : 'Daily Goal',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 13,
                             color: Colors.grey[600],
-                          ),
-                        ),
-                      if (isDaily)
-                        Text(
-                          'Daily Goal',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w400,
                           ),
                         ),
                     ],
@@ -347,69 +371,92 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(12),
+                      color: kPrimaryBlue.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Completed',
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
+                        color: kPrimaryBlue,
                       ),
                     ),
                   ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      _deleteGoal(goal['id']);
-                    } else if (value == 'update') {
-                      _showUpdateProgressDialog(goal);
-                    } else if (value == 'edit') {
-                      _editGoal(goal);
-                    }
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  child: Icon(
+                    CupertinoIcons.ellipsis,
+                    color: Colors.grey[400],
+                  ),
+                  onPressed: () {
+                    showCupertinoModalPopup(
+                      context: context,
+                      builder: (context) => CupertinoActionSheet(
+                        actions: [
+                          CupertinoActionSheetAction(
+                            child: const Text('Update Progress'),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _showUpdateProgressDialog(goal);
+                            },
+                          ),
+                          CupertinoActionSheetAction(
+                            child: const Text('Edit Goal'),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _editGoal(goal);
+                            },
+                          ),
+                          CupertinoActionSheetAction(
+                            isDestructiveAction: true,
+                            child: const Text('Delete'),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _deleteGoal(goal['id']);
+                            },
+                          ),
+                        ],
+                        cancelButton: CupertinoActionSheetAction(
+                          child: const Text('Cancel'),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ),
+                    );
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'update',
-                      child: Text('Update Progress'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Text('Edit Goal'),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Text('Delete'),
-                    ),
-                  ],
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Text(goal['description']),
+            Text(
+              goal['description'],
+              style: const TextStyle(
+                fontSize: 15,
+                color: Colors.black87,
+              ),
+            ),
             if (!isWeight) ...[
               const SizedBox(height: 16),
-              LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  Theme.of(context).primaryColor,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Colors.grey[200],
+                  valueColor: AlwaysStoppedAnimation<Color>(kPrimaryBlue),
+                  minHeight: 6,
                 ),
               ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                if (isWeight)
-                  Text(
-                    'Current: ${goal['current_value']} kg / Target: ${goal['target_value']} kg',
-                  )
-                else
-                  Text(
-                    '${goal['current_value']} ${_getUnitForCategory(goal['category'])} / ${goal['target_value']} ${_getUnitForCategory(goal['category'])}',
-                  ),
-              ],
+            const SizedBox(height: 12),
+            Text(
+              isWeight
+                ? 'Current: ${goal['current_value']} kg / Target: ${goal['target_value']} kg'
+                : '${goal['current_value']} ${_getUnitForCategory(goal['category'])} / ${goal['target_value']} ${_getUnitForCategory(goal['category'])}',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -417,51 +464,128 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Goals'),
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : goals.isEmpty
-              ? Center(
+  Widget _buildGoalsList() {
+    final dailyGoals = _getDailyGoals();
+    final nonDailyGoals = _getNonDailyGoals();
+
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [
+        CupertinoSliverRefreshControl(
+          onRefresh: _fetchGoals,
+        ),
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (dailyGoals.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                  child: Text(
+                    'Today\'s Goals',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                ),
+                ...dailyGoals.map((goal) => _buildGoalCard(goal)),
+              ],
+              if (nonDailyGoals.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                  child: Text(
+                    'Long-term Goals',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey[800],
+                    ),
+                  ),
+                ),
+                ...nonDailyGoals.map((goal) => _buildGoalCard(goal)),
+              ],
+              if (dailyGoals.isEmpty && nonDailyGoals.isEmpty)
+                Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Text(
+                      const SizedBox(height: 40),
+                      Text(
                         'No goals yet',
-                        style: TextStyle(fontSize: 18),
+                        style: TextStyle(
+                          fontSize: 17,
+                          color: Colors.grey[600],
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      ElevatedButton(
+                      CupertinoButton(
+                        color: kPrimaryBlue,
+                        child: const Text('Create Your First Goal'),
                         onPressed: () async {
                           final result = await Navigator.pushNamed(context, '/create-goal');
                           if (result == true) {
                             _fetchGoals();
                           }
                         },
-                        child: const Text('Create Your First Goal'),
                       ),
                     ],
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _fetchGoals,
-                  child: ListView.builder(
-                    itemCount: goals.length,
-                    itemBuilder: (context, index) => _buildGoalCard(goals[index]),
-                  ),
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.pushNamed(context, '/create-goal');
-          if (result == true) {
-            _fetchGoals();
-          }
-        },
-        child: const Icon(Icons.add),
+              const SizedBox(height: 80), // Space for FAB
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Goals',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      body: isLoading
+          ? Center(
+              child: CupertinoActivityIndicator(
+                radius: 12,
+                color: kPrimaryBlue,
+              ),
+            )
+          : _buildGoalsList(),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: kPrimaryBlue.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () async {
+            final result = await Navigator.pushNamed(context, '/create-goal');
+            if (result == true) {
+              _fetchGoals();
+            }
+          },
+          backgroundColor: kPrimaryBlue,
+          child: const Icon(CupertinoIcons.add),
+        ),
       ),
       bottomNavigationBar: BottomNavBar(
         currentIndex: getCurrentIndex(context),

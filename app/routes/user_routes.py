@@ -180,8 +180,21 @@ def get_user_goals(
         if has_previous_daily_goals:
             create_daily_goals(current_user, db)
     
-    # Return all goals
-    return db.query(Goal).filter(Goal.user_id == current_user.id).all()
+    # Get today's daily goals
+    daily_goals = db.query(Goal).filter(
+        Goal.user_id == current_user.id,
+        Goal.goal_type.in_(DAILY_GOALS),
+        Goal.start_date == today
+    ).all()
+    
+    # Get all non-daily goals
+    non_daily_goals = db.query(Goal).filter(
+        Goal.user_id == current_user.id,
+        ~Goal.goal_type.in_(DAILY_GOALS)
+    ).all()
+    
+    # Combine and return both sets of goals
+    return daily_goals + non_daily_goals
 
 @router.get("/users/goals/{goal_id}", response_model=GoalSchema)
 def get_user_goal(

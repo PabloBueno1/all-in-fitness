@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async'; // Add Timer import
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
+import '../constants/colors.dart';
 
 class WorkoutsPage extends StatefulWidget {
   const WorkoutsPage({super.key});
@@ -333,52 +335,104 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
     }
   }
 
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
+        backgroundColor: isError ? CupertinoColors.destructiveRed : kPrimaryBlue,
+      ),
+    );
+  }
+
   void _showEditWorkoutDialog(Map workout) {
     final nameController = TextEditingController(text: workout['name']);
     final dateController = TextEditingController(text: workout['date']);
     final durationController = TextEditingController(text: workout['duration'].toString());
 
-    showDialog(
+    showCupertinoModalPopup<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (BuildContext context) => CupertinoActionSheet(
         title: const Text('Edit Workout'),
-        content: SingleChildScrollView(
+        message: Container(
+          padding: const EdgeInsets.all(16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
+              CupertinoTextField(
                 controller: nameController,
-                decoration: const InputDecoration(labelText: 'Workout Name'),
+                placeholder: 'Workout Name',
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: CupertinoColors.systemGrey4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
-              TextField(
-                controller: dateController,
-                decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
-                onTap: () async {
-                  final DateTime? picked = await showDatePicker(
+              const SizedBox(height: 16),
+              GestureDetector(
+                onTap: () {
+                  showCupertinoModalPopup<void>(
                     context: context,
-                    initialDate: DateTime.tryParse(workout['date']) ?? DateTime.now(),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime(2100),
+                    builder: (BuildContext context) => Container(
+                      height: 216,
+                      padding: const EdgeInsets.only(top: 6.0),
+                      margin: EdgeInsets.only(
+                        bottom: MediaQuery.of(context).viewInsets.bottom,
+                      ),
+                      color: CupertinoColors.systemBackground.resolveFrom(context),
+                      child: SafeArea(
+                        top: false,
+                        child: CupertinoDatePicker(
+                          initialDateTime: DateTime.tryParse(workout['date']) ?? DateTime.now(),
+                          mode: CupertinoDatePickerMode.date,
+                          use24hFormat: true,
+                          onDateTimeChanged: (DateTime newDate) {
+                            dateController.text = newDate.toIso8601String().split('T')[0];
+                          },
+                        ),
+                      ),
+                    ),
                   );
-                  if (picked != null) {
-                    dateController.text = picked.toIso8601String().split('T')[0];
-                  }
                 },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: CupertinoColors.systemGrey4),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        dateController.text,
+                        style: const TextStyle(color: CupertinoColors.black),
+                      ),
+                      const Icon(
+                        CupertinoIcons.calendar,
+                        color: CupertinoColors.systemGrey,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              TextField(
+              const SizedBox(height: 16),
+              CupertinoTextField(
                 controller: durationController,
-                decoration: const InputDecoration(labelText: 'Duration (minutes)'),
+                placeholder: 'Duration (minutes)',
                 keyboardType: TextInputType.number,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: CupertinoColors.systemGrey4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
+          CupertinoActionSheetAction(
             onPressed: () {
               _updateWorkout(
                 workout['id'],
@@ -390,6 +444,11 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
             },
             child: const Text('Save'),
           ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
         ],
       ),
     );
@@ -398,250 +457,445 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Workouts")),
-      body: Column(
-        children: [
-          const SizedBox(height: 20),
-          const Text("Your Workouts:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-          // Buttons for Creating Workout & Exercise
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: () async {
-                    final result = await Navigator.pushNamed(context, '/create-workout');
-                    if (result == true) {
-                      _fetchWorkouts();
-                    }
-                  },
-                  child: const Text("Create Workout"),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final result = await Navigator.pushNamed(context, '/create-exercise');
-                    if (result == true) {
-                      _fetchWorkouts();
-                    }
-                  },
-                  child: const Text("Create Exercise"),
-                ),
-              ],
-            ),
+      backgroundColor: kBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Workouts',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
           ),
+        ),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                itemCount: workouts.length,
+                itemBuilder: (context, index) {
+                  final workout = workouts[index];
+                  final workoutId = workout['id'];
 
-          // Workouts List
-          Expanded(
-            child: ListView.builder(
-              itemCount: workouts.length,
-              itemBuilder: (context, index) {
-                final workout = workouts[index];
-                final workoutId = workout['id'];
-
-                return Card(
-                  elevation: 2,
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: ExpansionTile(
-                    title: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(workout['name']),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _showEditWorkoutDialog(workout),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteWorkout(workoutId),
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
                         ),
                       ],
                     ),
-                    subtitle: Text("Date: ${workout['date']} | Duration: ${workout['duration']} min"),
-                    children: [
-                      // Search and Add Exercise Section
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
+                    child: Theme(
+                      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        title: Row(
                           children: [
-                            // Search Box
-                            TextField(
-                              controller: _getSearchController(workoutId),
-                              decoration: const InputDecoration(
-                                labelText: 'Search Exercises',
-                                prefixIcon: Icon(Icons.search),
-                                border: OutlineInputBorder(),
+                            Icon(CupertinoIcons.sportscourt,
+                                color: kPrimaryBlue, size: 20),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    workout['name'],
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black,
+                                    ),
+                                  ),
+                                  Text(
+                                    "Date: ${workout['date']} | Duration: ${workout['duration']} min",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              onChanged: (value) async {
-                                // Cancel any existing timer for this workout
-                                _searchDebounceTimers[workoutId]?.cancel();
-
-                                setState(() {
-                                  workoutSearchQueries[workoutId] = value;
-                                  if (value.isEmpty) {
-                                    exerciseTypes = [];
-                                    isSearchingWorkout[workoutId] = false;
-                                    _searchFutures[workoutId] = Future.value([]);
-                                  } else {
-                                    isSearchingWorkout[workoutId] = true;
-                                  }
-                                });
-                                
-                                if (value.isNotEmpty) {
-                                  // Start a new timer
-                                  _searchDebounceTimers[workoutId] = Timer(const Duration(milliseconds: 500), () {
-                                    if (mounted) {
-                                      setState(() {
-                                        // Store the future for this search
-                                        _searchFutures[workoutId] = searchExercises(value);
-                                      });
-                                    }
-                                  });
-                                }
+                            ),
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              child: Icon(
+                                CupertinoIcons.ellipsis,
+                                color: Colors.grey[400],
+                              ),
+                              onPressed: () {
+                                showCupertinoModalPopup(
+                                  context: context,
+                                  builder: (context) => CupertinoActionSheet(
+                                    actions: [
+                                      CupertinoActionSheetAction(
+                                        child: const Text('Edit Workout'),
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _showEditWorkoutDialog(workout);
+                                        },
+                                      ),
+                                      CupertinoActionSheetAction(
+                                        isDestructiveAction: true,
+                                        child: const Text('Delete Workout'),
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _deleteWorkout(workoutId);
+                                        },
+                                      ),
+                                    ],
+                                    cancelButton: CupertinoActionSheetAction(
+                                      child: const Text('Cancel'),
+                                      onPressed: () => Navigator.pop(context),
+                                    ),
+                                  ),
+                                );
                               },
                             ),
+                          ],
+                        ),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: CupertinoSearchTextField(
+                                        controller: _getSearchController(workoutId),
+                                        placeholder: "Search Exercises to Add",
+                                        onChanged: (value) {
+                                          _searchDebounceTimers[workoutId]?.cancel();
+                                          setState(() {
+                                            workoutSearchQueries[workoutId] = value;
+                                            if (value.isEmpty) {
+                                              exerciseTypes = [];
+                                              isSearchingWorkout[workoutId] = false;
+                                              _searchFutures[workoutId] = Future.value([]);
+                                            } else {
+                                              isSearchingWorkout[workoutId] = true;
+                                            }
+                                          });
 
-                            const SizedBox(height: 8),
-
-                            // Exercise Search Results
-                            if (isSearchingWorkout[workoutId] == true)
-                              FutureBuilder<List<Map<String, dynamic>>>(
-                                future: _searchFutures[workoutId] ?? Future.value([]),
-                                builder: (context, snapshot) {
-                                  if (snapshot.connectionState == ConnectionState.waiting) {
-                                    return const Center(child: CircularProgressIndicator());
-                                  } else if (snapshot.hasError) {
-                                    return const Center(child: Text("Error loading search results"));
-                                  } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                                    return Container(
-                                      height: 200,
-                                      decoration: BoxDecoration(
-                                        border: Border.all(color: Colors.grey.shade300),
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      child: ListView.builder(
-                                        shrinkWrap: true,
-                                        itemCount: snapshot.data!.length,
-                                        itemBuilder: (context, index) {
-                                          final exercise = snapshot.data![index];
-                                          return ListTile(
-                                            title: Text(exercise['name'] ?? 'Unnamed Exercise'),
-                                            subtitle: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(exercise['category'] ?? 'Uncategorized'),
-                                                if ((exercise['muscles'] ?? '').toString().isNotEmpty)
-                                                  Text(
-                                                    'Muscles: ${exercise['muscles']}',
-                                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                                                  ),
-                                              ],
-                                            ),
-                                            trailing: IconButton(
-                                              icon: const Icon(Icons.add_circle, color: Colors.blue),
-                                              onPressed: () {
-                                                // Quick add with default sets
-                                                final sanitizedExercise = {
-                                                  'id': exercise['id'] ?? 0,
-                                                  'name': exercise['name'] ?? 'Unnamed Exercise',
-                                                  'category': exercise['category'] ?? 'Uncategorized',
-                                                  'muscles': exercise['muscles'] ?? '',
-                                                  'description': exercise['description'] ?? '',
-                                                  'is_predefined': exercise['is_predefined'] ?? false,
-                                                };
-                                                _addExerciseToWorkout(workoutId, sanitizedExercise);
+                                          if (value.isNotEmpty) {
+                                            _searchDebounceTimers[workoutId] = Timer(
+                                              const Duration(milliseconds: 500),
+                                              () {
+                                                if (mounted) {
+                                                  setState(() {
+                                                    _searchFutures[workoutId] = searchExercises(value);
+                                                  });
+                                                }
                                               },
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (isSearchingWorkout[workoutId] ?? false)
+                                  Column(
+                                    children: [
+                                      const SizedBox(height: 16),
+                                      FutureBuilder<List<Map<String, dynamic>>>(
+                                        future: _searchFutures[workoutId] ?? Future.value([]),
+                                        builder: (context, snapshot) {
+                                          if (snapshot.connectionState == ConnectionState.waiting) {
+                                            return const Center(child: CupertinoActivityIndicator());
+                                          } else if (snapshot.hasError) {
+                                            return Center(
+                                              child: Text(
+                                                "Error loading search results",
+                                                style: TextStyle(color: CupertinoColors.destructiveRed),
+                                              ),
+                                            );
+                                          } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                                            return Container(
+                                              height: 200,
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[50],
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: ListView.builder(
+                                                shrinkWrap: true,
+                                                physics: const NeverScrollableScrollPhysics(),
+                                                itemCount: snapshot.data!.length,
+                                                itemBuilder: (context, index) {
+                                                  final exercise = snapshot.data![index];
+                                                  return Container(
+                                                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.grey[50],
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: CupertinoListTile(
+                                                      title: Text(
+                                                        exercise['name'] ?? 'Unnamed Exercise',
+                                                        style: const TextStyle(
+                                                          fontSize: 15,
+                                                          fontWeight: FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                      trailing: CupertinoButton(
+                                                        padding: EdgeInsets.zero,
+                                                        child: Text(
+                                                          'Add',
+                                                          style: TextStyle(color: kPrimaryBlue),
+                                                        ),
+                                                        onPressed: () {
+                                                          final sanitizedExercise = {
+                                                            'id': exercise['id'] ?? 0,
+                                                            'name': exercise['name'] ?? 'Unnamed Exercise',
+                                                            'category': exercise['category'] ?? 'Uncategorized',
+                                                            'muscles': exercise['muscles'] ?? '',
+                                                            'description': exercise['description'] ?? '',
+                                                            'is_predefined': exercise['is_predefined'] ?? false,
+                                                          };
+                                                          _addExerciseToWorkout(workoutId, sanitizedExercise);
+                                                        },
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            );
+                                          } else {
+                                            return const Text(
+                                              "No exercises found",
+                                              style: TextStyle(color: kSecondaryText),
+                                            );
+                                          }
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                if (!(isSearchingWorkout[workoutId] ?? false) && workoutExercises.containsKey(workoutId) &&
+                                    workoutExercises[workoutId]!.isNotEmpty)
+                                  Column(
+                                    children: [
+                                      const SizedBox(height: 16),
+                                      ...workoutExercises[workoutId]!.map((exercise) {
+                                        return Container(
+                                          margin: const EdgeInsets.only(bottom: 8),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: CupertinoListTile(
+                                            title: Text(
+                                              exercise['exercise_name'],
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              "Sets: ${exercise['sets']}",
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
+                                            leading: Icon(CupertinoIcons.pencil_circle,
+                                                color: kPrimaryBlue),
+                                            trailing: CupertinoButton(
+                                              padding: EdgeInsets.zero,
+                                              child: const Icon(
+                                                CupertinoIcons.minus_circle,
+                                                color: CupertinoColors.destructiveRed,
+                                              ),
+                                              onPressed: () =>
+                                                  _removeExerciseFromWorkout(workoutId, exercise['exercise_id']),
                                             ),
                                             onTap: () async {
-                                              // Navigate to exercise log page for custom sets
-                                              final sanitizedExercise = {
-                                                'id': exercise['id'] ?? 0,
-                                                'name': exercise['name'] ?? 'Unnamed Exercise',
-                                                'category': exercise['category'] ?? 'Uncategorized',
-                                                'muscles': exercise['muscles'] ?? '',
-                                                'description': exercise['description'] ?? '',
-                                                'is_predefined': exercise['is_predefined'] ?? false,
-                                              };
-                                              
                                               final result = await Navigator.pushNamed(
                                                 context,
                                                 '/exercise-log',
                                                 arguments: {
                                                   'workoutId': workoutId,
-                                                  'exerciseToAdd': sanitizedExercise,
-                                                  'exerciseName': exercise['name'] ?? 'Unnamed Exercise',
-                                                  'isNewExercise': true,
+                                                  'exerciseId': exercise['exercise_id'],
+                                                  'exerciseName': exercise['exercise_name'],
+                                                  'setCap': exercise['sets'],
                                                 },
                                               );
 
                                               if (result == true) {
-                                                setState(() {
-                                                  exerciseTypes = [];
-                                                  workoutSearchQueries[workoutId] = '';
-                                                  isSearchingWorkout[workoutId] = false;
-                                                });
-                                                _getSearchController(workoutId).clear();
                                                 _fetchWorkoutExercises(workoutId);
                                               }
                                             },
-                                            isThreeLine: (exercise['muscles'] ?? '').toString().isNotEmpty,
-                                          );
-                                        },
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ],
+                                  )
+                                else if (!(isSearchingWorkout[workoutId] ?? false))
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 16),
+                                    child: Text(
+                                      "No exercises added yet",
+                                      style: TextStyle(color: kSecondaryText),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: kPrimaryBlue.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () {
+            final RenderBox button = context.findRenderObject() as RenderBox;
+            final position = button.localToGlobal(Offset.zero);
+            
+            showCupertinoModalPopup(
+              context: context,
+              barrierDismissible: true,
+              builder: (context) => TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutBack,
+                builder: (context, value, child) {
+                  return Transform.scale(
+                    scale: value,
+                    child: Positioned(
+                      top: position.dy - 220,
+                      right: 16,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          width: 220,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Colors.grey[200]!,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Add New',
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black,
                                       ),
-                                    );
-                                  } else {
-                                    return const Text("No exercises found");
+                                    ),
+                                    CupertinoButton(
+                                      padding: EdgeInsets.zero,
+                                      child: const Icon(CupertinoIcons.xmark),
+                                      onPressed: () => Navigator.pop(context),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              CupertinoButton(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                pressedOpacity: 0.7,
+                                color: Colors.transparent,
+                                child: Row(
+                                  children: [
+                                    Icon(CupertinoIcons.sportscourt_fill, color: kPrimaryBlue),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Create Workout',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                  final result = await Navigator.pushNamed(context, '/create-workout');
+                                  if (result == true) {
+                                    _fetchWorkouts();
                                   }
                                 },
                               ),
-
-                            const Divider(),
-
-                            // Added Exercises Section
-                            if (workoutExercises.containsKey(workoutId) &&
-                                workoutExercises[workoutId]!.isNotEmpty)
-                              ...workoutExercises[workoutId]!.map((exercise) {
-                                return ListTile(
-                                  title: Text(exercise['exercise_name']),
-                                  subtitle: Text("Sets: ${exercise['sets']}"),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.remove_circle, color: Colors.red),
-                                    onPressed: () =>
-                                        _removeExerciseFromWorkout(workoutId, exercise['exercise_id']),
-                                  ),
-                                  onTap: () async {
-                                    final result = await Navigator.pushNamed(
-                                      context,
-                                      '/exercise-log',
-                                      arguments: {
-                                        'workoutId': workoutId,
-                                        'exerciseId': exercise['exercise_id'],
-                                        'exerciseName': exercise['exercise_name'],
-                                        'setCap': exercise['sets'],
-                                      },
-                                    );
-
-                                    if (result == true) {
-                                      _fetchWorkoutExercises(workoutId);
-                                    }
-                                  },
-                                );
-                              }).toList()
-                            else
-                              const Text("No exercises added yet"),
-                          ],
+                              CupertinoButton(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                pressedOpacity: 0.7,
+                                color: Colors.transparent,
+                                child: Row(
+                                  children: [
+                                    Icon(CupertinoIcons.plus_circle_fill, color: kPrimaryBlue),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Create Exercise',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                  final result = await Navigator.pushNamed(context, '/create-exercise');
+                                  if (result == true) {
+                                    _fetchWorkouts();
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+          backgroundColor: kPrimaryBlue,
+          child: const Icon(CupertinoIcons.add),
+        ),
       ),
       bottomNavigationBar: BottomNavBar(
         currentIndex: getCurrentIndex(context),

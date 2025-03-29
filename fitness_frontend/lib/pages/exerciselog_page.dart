@@ -1,7 +1,9 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../constants/colors.dart';
 
 class ExerciseLogPage extends StatefulWidget {
   const ExerciseLogPage({Key? key}) : super(key: key);
@@ -65,18 +67,14 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     String token = prefs.getString('token') ?? '';
 
     if (token.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Error: No token found. Please log in.")),
-      );
+      _showSnackBar("Error: No token found. Please log in.");
       return;
     }
     List<Map<String, dynamic>> currentLogs = await _fetchExerciseLogs(workoutId, exerciseId);
     int nextSetNumber = currentLogs.length + 1;
 
      if (currentLogs.length >= setCap) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("You've reached the maximum number of sets.")),
-      );
+      _showSnackBar("You've reached the maximum number of sets.");
       return;
     }
 
@@ -84,9 +82,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     int? reps = int.tryParse(_repsController.text);
 
     if (weight == null || reps == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter valid weight and reps.")),
-      );
+      _showSnackBar("Please enter valid weight and reps.");
       return;
     }
 
@@ -111,13 +107,9 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
         _logsFuture = _fetchExerciseLogs(workoutId, exerciseId);
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Set logged successfully!")),
-      );
+      _showSnackBar("Set logged successfully!");
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to log set.")),
-      );
+      _showSnackBar("Failed to log set.");
     }
   }
 
@@ -132,22 +124,16 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     );
 
     if (response.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Log deleted successfully!")),
-      );
+      _showSnackBar("Log deleted successfully!");
 
       // Refresh logs after deletion
       setState(() {
         _logsFuture = _fetchExerciseLogs(workoutId, exerciseId);  // Refresh the list
       });
     } else if (response.statusCode == 404) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Log not found.")),
-      );
+      _showSnackBar("Log not found.");
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to delete log.")),
-      );
+      _showSnackBar("Failed to delete log.");
     }
   }
 
@@ -159,46 +145,75 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     final int initialWeight = log['weight'];
     final int initialReps = log['reps'];
 
-    showDialog(
+    showCupertinoModalPopup(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Set'),
-        content: Column(
+      builder: (context) => CupertinoActionSheet(
+        title: Material(
+          type: MaterialType.transparency,
+          child: Text(
+            'Edit Set',
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: CupertinoColors.label,
+            ),
+          ),
+        ),
+        message: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: weightController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Weight (lbs)'),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemBackground,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: CupertinoColors.systemGrey5),
+              ),
+              child: CupertinoTextField(
+                controller: weightController,
+                keyboardType: TextInputType.number,
+                placeholder: 'Weight (lbs)',
+                padding: const EdgeInsets.all(12),
+                decoration: null,
+                placeholderStyle: const TextStyle(
+                  color: CupertinoColors.placeholderText,
+                ),
+              ),
             ),
-            TextField(
-              controller: repsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Reps'),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: CupertinoColors.systemBackground,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: CupertinoColors.systemGrey5),
+              ),
+              child: CupertinoTextField(
+                controller: repsController,
+                keyboardType: TextInputType.number,
+                placeholder: 'Reps',
+                padding: const EdgeInsets.all(12),
+                decoration: null,
+                placeholderStyle: const TextStyle(
+                  color: CupertinoColors.placeholderText,
+                ),
+              ),
             ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
+          CupertinoActionSheetAction(
             onPressed: () async {
               int? newWeight = int.tryParse(weightController.text);
               int? newReps = int.tryParse(repsController.text);
 
               if (newWeight == null && newReps == null) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Please enter valid weight or reps.")),
-                );
+                _showSnackBar("Please enter valid weight or reps.");
                 return;
               }
 
               SharedPreferences prefs = await SharedPreferences.getInstance();
               String token = prefs.getString('token') ?? '';
 
-              // Only include fields that have changed
               Map<String, dynamic> updateData = {};
               if (newWeight != initialWeight) updateData['weight'] = newWeight;
               if (newReps != initialReps) updateData['reps'] = newReps;
@@ -217,18 +232,32 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
                   _logsFuture = _fetchExerciseLogs(workoutId, exerciseId);
                 });
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Log updated successfully!")),
-                );
+                _showSnackBar("Log updated successfully!");
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Failed to update log.")),
-                );
+                _showSnackBar("Failed to update log.");
               }
             },
-            child: const Text('Save'),
+            isDefaultAction: true,
+            child: const Text(
+              'Save',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          isDestructiveAction: true,
+          child: const Text(
+            'Cancel',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -240,9 +269,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
 
     int? sets = int.tryParse(_setsController.text);
     if (sets == null || sets <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid number of sets")),
-      );
+      _showSnackBar("Please enter a valid number of sets");
       return;
     }
 
@@ -258,9 +285,7 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
         final savedExercise = json.decode(response.body);
         exerciseToAdd = {...exerciseToAdd, 'id': savedExercise['id']};
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to save exercise.")),
-        );
+        _showSnackBar("Failed to save exercise.");
         return;
       }
     }
@@ -281,158 +306,124 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
 
     if (response.statusCode == 200) {
       Navigator.pop(context, true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Exercise added successfully!")),
-      );
+      _showSnackBar("Exercise added successfully!");
     } else if (response.statusCode == 409) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("This exercise is already in your workout!")),
-      );
+      _showSnackBar("This exercise is already in your workout!");
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to add exercise.")),
-      );
+      _showSnackBar("Failed to add exercise.");
     }
+  }
+
+  // iOS-style snackbar
+  void _showSnackBar(String message) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('OK'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(exerciseName)),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Exercise Details Card
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      exerciseName,
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    if (isNewExercise) ...[
-                      Text(
-                        "Category: ${exerciseToAdd['category'] ?? 'Uncategorized'}",
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      if ((exerciseToAdd['muscles'] ?? '').toString().isNotEmpty)
-                        Text(
-                          "Muscles: ${exerciseToAdd['muscles']}",
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      if ((exerciseToAdd['description'] ?? '').toString().isNotEmpty)
-                        Text(
-                          "Description: ${exerciseToAdd['description']}",
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                    ],
-                    const SizedBox(height: 8),
-                    Text(
-                      isNewExercise 
-                          ? "Add to workout..."
-                          : "Sets: $setCap",
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: isNewExercise ? Colors.blue : Colors.green,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+    return CupertinoPageScaffold(
+      navigationBar: CupertinoNavigationBar(
+        middle: Material(
+          type: MaterialType.transparency,
+          child: Text(
+            exerciseName,
+            style: const TextStyle(
+              color: CupertinoColors.label,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 20),
-
-            if (isNewExercise) ...[
-              // Sets input for new exercise
-              TextField(
-                controller: _setsController,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: "Number of Sets",
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 20),
-              
-              // Add button
-              SizedBox(
+          ),
+        ),
+        backgroundColor: CupertinoColors.systemBackground,
+        border: null,
+      ),
+      backgroundColor: CupertinoColors.systemBackground,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Exercise Details Card
+              Container(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _addNewExerciseToWorkout,
-                  icon: const Icon(Icons.add_circle_outline),
-                  label: const Text("Add to Workout"),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 15),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.systemBackground,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: CupertinoColors.systemGrey5),
                 ),
-              ),
-            ] else ...[
-              // Progress indicator
-              FutureBuilder<List<Map<String, dynamic>>>(
-                future: _logsFuture,
-                builder: (context, snapshot) {
-                  double progress = 0.0;
-                  if (snapshot.hasData) {
-                    progress = snapshot.data!.length / setCap;
-                  }
-                  return LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.blue),
-                  );
-                },
-              ),
-              const SizedBox(height: 20),
-
-              // Existing exercise logging UI
-              Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        "Log New Set",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _weightController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: "Weight (lbs)",
-                          border: OutlineInputBorder(),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Material(
+                              type: MaterialType.transparency,
+                              child: Text(
+                                exerciseName,
+                                style: const TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: CupertinoColors.label,
+                                ),
+                              ),
+                            ),
+                            if (isNewExercise && 
+                                (exerciseToAdd['category']?.toString().isNotEmpty ?? false)) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                "Muscles",
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: CupertinoColors.label,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Material(
+                                type: MaterialType.transparency,
+                                child: Text(
+                                  exerciseToAdd['muscles'],
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    color: CupertinoColors.secondaryLabel,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _repsController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: "Reps",
-                          border: OutlineInputBorder(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: kPrimaryBlue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                      ),
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _logSingleExerciseSet(workoutId, exerciseId),
-                          icon: const Icon(Icons.add),
-                          label: const Text("Log Set"),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: Text(
+                            isNewExercise ? "New" : "${setCap} sets",
+                            style: TextStyle(
+                              fontSize: 15,
+                              color: kPrimaryBlue,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
@@ -440,81 +431,329 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              
-              const Text(
-                "Logged Sets",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: FutureBuilder<List<Map<String, dynamic>>>(
+              if (isNewExercise && 
+                  ((exerciseToAdd['muscles']?.toString().isNotEmpty ?? false) ||
+                   (exerciseToAdd['description']?.toString().isNotEmpty ?? false))) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: CupertinoColors.systemGrey5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((exerciseToAdd['muscles'] ?? '').toString().isNotEmpty) ...[
+                          Text(
+                            "Muscles",
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: CupertinoColors.label,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              exerciseToAdd['muscles'],
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if ((exerciseToAdd['description'] ?? '').toString().isNotEmpty) ...[
+                          if ((exerciseToAdd['muscles'] ?? '').toString().isNotEmpty)
+                            const SizedBox(height: 12),
+                          Text(
+                            "Description",
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: CupertinoColors.label,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              exerciseToAdd['description'],
+                              style: const TextStyle(
+                                fontSize: 15,
+                                color: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+
+              if (isNewExercise) ...[
+                // Sets input for new exercise
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemBackground,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: CupertinoColors.systemGrey5),
+                  ),
+                  child: CupertinoTextField(
+                    controller: _setsController,
+                    keyboardType: TextInputType.number,
+                    placeholder: "Number of Sets",
+                    padding: const EdgeInsets.all(12),
+                    decoration: null,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Add button
+                SizedBox(
+                  width: double.infinity,
+                  child: CupertinoButton(
+                    color: kPrimaryBlue,
+                    borderRadius: BorderRadius.circular(8),
+                    onPressed: _addNewExerciseToWorkout,
+                    child: const Text(
+                      "Add to Workout",
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                // Progress indicator
+                FutureBuilder<List<Map<String, dynamic>>>(
                   future: _logsFuture,
                   builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                    double progress = 0.0;
+                    if (snapshot.hasData) {
+                      progress = snapshot.data!.length / setCap;
                     }
-                    final logs = snapshot.data ?? [];
-
-                    if (logs.isEmpty) {
-                      return Center(
-                        child: Text(
-                          "No sets logged yet.\nPlanned sets: $setCap",
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey,
+                    return Container(
+                      height: 2,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: CupertinoColors.systemGrey5,
+                          borderRadius: BorderRadius.circular(1),
+                        ),
+                        child: FractionallySizedBox(
+                          widthFactor: progress,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: kPrimaryBlue,
+                              borderRadius: BorderRadius.circular(1),
+                            ),
                           ),
                         ),
-                      );
-                    }
-
-                    return ListView.builder(
-                      itemCount: logs.length,
-                      itemBuilder: (context, index) {
-                        final log = logs[index];
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          child: ListTile(
-                            title: Text(
-                              "Set ${log['set_number'] ?? 'N/A'}: ${log['weight'] ?? '0'} lbs × ${log['reps'] ?? '0'} reps",
-                              style: const TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit, color: Colors.blue),
-                                  onPressed: () {
-                                    _showEditLogDialog(log);
-                                  },
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.red),
-                                  onPressed: () {
-                                    final logId = log['id'];
-                                    if (logId != null) {
-                                      _deleteExerciseLog(logId);
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text("Error: Log ID is missing")),
-                                      );
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+                      ),
                     );
                   },
                 ),
-              ),
+                const SizedBox(height: 16),
+
+                // Log New Set Card
+                Container(
+                  decoration: BoxDecoration(
+                    color: CupertinoColors.systemBackground,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: CupertinoColors.systemGrey5),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Material(
+                          type: MaterialType.transparency,
+                          child: Text(
+                            "Log New Set",
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                              color: CupertinoColors.label,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemBackground,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: CupertinoColors.systemGrey5),
+                          ),
+                          child: CupertinoTextField(
+                            controller: _weightController,
+                            keyboardType: TextInputType.number,
+                            placeholder: "Weight (lbs)",
+                            padding: const EdgeInsets.all(12),
+                            decoration: null,
+                            placeholderStyle: const TextStyle(
+                              color: CupertinoColors.placeholderText,
+                            ),
+                            style: const TextStyle(
+                              color: CupertinoColors.label,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: CupertinoColors.systemBackground,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: CupertinoColors.systemGrey5),
+                          ),
+                          child: CupertinoTextField(
+                            controller: _repsController,
+                            keyboardType: TextInputType.number,
+                            placeholder: "Reps",
+                            padding: const EdgeInsets.all(12),
+                            decoration: null,
+                            placeholderStyle: const TextStyle(
+                              color: CupertinoColors.placeholderText,
+                            ),
+                            style: const TextStyle(
+                              color: CupertinoColors.label,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: CupertinoButton(
+                            color: kPrimaryBlue,
+                            borderRadius: BorderRadius.circular(8),
+                            onPressed: () => _logSingleExerciseSet(workoutId, exerciseId),
+                            child: const Text(
+                              "Log Set",
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: CupertinoColors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                
+                Material(
+                  type: MaterialType.transparency,
+                  child: Text(
+                    "Logged Sets",
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: CupertinoColors.label,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Expanded(
+                  child: FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _logsFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CupertinoActivityIndicator());
+                      }
+                      final logs = snapshot.data ?? [];
+
+                      if (logs.isEmpty) {
+                        return Center(
+                          child: Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              "No sets logged yet.\nPlanned sets: $setCap",
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                color: CupertinoColors.secondaryLabel,
+                              ),
+                            ),
+                          ),
+                        );
+                      }
+
+                      return ListView.builder(
+                        itemCount: logs.length,
+                        itemBuilder: (context, index) {
+                          final log = logs[index];
+                          return Container(
+                            margin: const EdgeInsets.symmetric(vertical: 4),
+                            decoration: BoxDecoration(
+                              color: CupertinoColors.systemBackground,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: CupertinoColors.systemGrey5),
+                            ),
+                            child: CupertinoListTile(
+                              title: Material(
+                                type: MaterialType.transparency,
+                                child: Text(
+                                  "Set ${log['set_number'] ?? 'N/A'}: ${log['weight'] ?? '0'} lbs × ${log['reps'] ?? '0'} reps",
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w500,
+                                    color: CupertinoColors.label,
+                                  ),
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CupertinoButton(
+                                    padding: EdgeInsets.zero,
+                                    child: Icon(
+                                      CupertinoIcons.pencil,
+                                      color: kPrimaryBlue,
+                                      size: 20,
+                                    ),
+                                    onPressed: () => _showEditLogDialog(log),
+                                  ),
+                                  CupertinoButton(
+                                    padding: EdgeInsets.zero,
+                                    child: Icon(
+                                      CupertinoIcons.delete,
+                                      color: kPrimaryBlue,
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      final logId = log['id'];
+                                      if (logId != null) {
+                                        _deleteExerciseLog(logId);
+                                      } else {
+                                        _showSnackBar("Error: Log ID is missing");
+                                      }
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
+

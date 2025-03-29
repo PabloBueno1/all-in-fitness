@@ -4,9 +4,18 @@ import 'package:http/http.dart' as http;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import 'dart:convert';
+import 'dart:ui';
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import 'package:flutter/rendering.dart';
+
+// iOS-style constants
+const kBackgroundColor = Color(0xFFF2F2F7);
+const kCardBackground = Colors.white;
+const kPrimaryBlue = Color(0xFF007AFF);
+const kSecondaryText = Color(0xFF8E8E93);
+const kBorderRadius = 16.0;
+const kSpacing = 16.0;
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -93,21 +102,13 @@ class _DashboardPageState extends State<DashboardPage>
   Widget _buildNutritionCard() {
     final nutrition = dashboardData['nutrition'] ?? {};
     
-    return Card(
-      margin: const EdgeInsets.all(16),
+    return _buildCard(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpacing),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Today\'s Nutrition',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
+            _buildSectionTitle('Today\'s Nutrition'),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -129,14 +130,19 @@ class _DashboardPageState extends State<DashboardPage>
         Text(
           label,
           style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: kSecondaryText,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           '${value.toStringAsFixed(1)}$unit',
-          style: const TextStyle(fontSize: 16),
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
         ),
       ],
     );
@@ -146,21 +152,13 @@ class _DashboardPageState extends State<DashboardPage>
     final workouts = dashboardData['workouts'] ?? {};
     final details = workouts['details'] ?? [];
     
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+    return _buildCard(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpacing),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Today\'s Workouts',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
+            _buildSectionTitle('Today\'s Workouts'),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -170,20 +168,14 @@ class _DashboardPageState extends State<DashboardPage>
               ],
             ),
             if (details.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 8),
+              const SizedBox(height: kSpacing),
+              Container(
+                height: 1,
+                color: kBackgroundColor,
+              ),
+              const SizedBox(height: kSpacing),
               ...details.map((workout) {
                 final exercises = workout['exercises'] ?? [];
-                String setsInfo = '';
-                if (exercises.isNotEmpty) {
-                  setsInfo = exercises.map((exercise) {
-                    final logs = exercise['logs'] ?? [];
-                    return logs.map((log) => 
-                      '${log['weight']}×${log['reps']}'
-                    ).join(' | ');
-                  }).join('\n');
-                }
                 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,43 +187,71 @@ class _DashboardPageState extends State<DashboardPage>
                           workout['name'],
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                            fontSize: 17,
+                            color: Colors.black,
                           ),
                         ),
-                        Text('${workout['duration']}m'),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kBackgroundColor,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${workout['duration']}m',
+                            style: const TextStyle(
+                              color: kSecondaryText,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: kSpacing / 2),
                     ...exercises.map((exercise) {
                       final logs = exercise['logs'] ?? [];
                       final setsInfo = logs.map((log) => 
                         '${log['weight']}×${log['reps']}'
                       ).join(' | ');
                       
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            exercise['name'],
-                            style: TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 14,
-                              color: Theme.of(context).textTheme.bodyMedium?.color,
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: kSpacing / 2),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              exercise['name'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                                fontSize: 15,
+                                color: Colors.black,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            setsInfo,
-                            style: TextStyle(
-                              color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
-                              fontSize: 13,
+                            const SizedBox(height: 4),
+                            Text(
+                              setsInfo,
+                              style: TextStyle(
+                                color: kSecondaryText,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w400,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
+                          ],
+                        ),
                       );
                     }).toList(),
-                    if (details.last != workout) const Divider(),
+                    if (details.last != workout) ...[
+                      const SizedBox(height: kSpacing / 2),
+                      Container(
+                        height: 1,
+                        color: kBackgroundColor,
+                      ),
+                      const SizedBox(height: kSpacing / 2),
+                    ],
                   ],
                 );
               }).toList(),
@@ -248,14 +268,19 @@ class _DashboardPageState extends State<DashboardPage>
         Text(
           label,
           style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: kSecondaryText,
           ),
         ),
         const SizedBox(height: 4),
         Text(
           value.toString(),
-          style: const TextStyle(fontSize: 16),
+          style: const TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
         ),
       ],
     );
@@ -265,58 +290,100 @@ class _DashboardPageState extends State<DashboardPage>
     final weeklyProgress = dashboardData['weekly_progress'] ?? [];
     if (weeklyProgress.isEmpty) return const SizedBox.shrink();
 
-    // Sort by date and take last 7 days
+    // Sort data by date
     weeklyProgress.sort((a, b) => 
       DateTime.parse(a['date'].toString()).compareTo(DateTime.parse(b['date'].toString())));
+    
+    // Get the last 7 days of data
     final recentData = weeklyProgress.length > 7 
         ? weeklyProgress.sublist(weeklyProgress.length - 7) 
         : weeklyProgress;
 
-    // Create data points for weight only
     final List<FlSpot> spots = [];
     final List<String> labels = [];
+    double minWeight = double.infinity;
+    double maxWeight = double.negativeInfinity;
 
-    // Process data points
-    for (var i = 0; i < recentData.length; i++) {
-      final entry = recentData[i];
+    // Create a map to store unique date entries
+    final Map<String, int> dateIndices = {};
+    int currentIndex = 0;
+
+    for (var entry in recentData) {
       final goals = entry['goals'] ?? {};
       final date = DateTime.parse(entry['date'].toString());
-      
-      // Add weight data point
       final weight = (goals['weight']?['current'] ?? 0.0).toDouble();
-      if (weight > 0) {
-        spots.add(FlSpot(i.toDouble(), weight));
-        labels.add(DateFormat('E').format(date));
+      final dateStr = DateFormat('MM/dd').format(date);
+      
+      // Only add data points for days that have weight data
+      if (weight > 0 && !dateIndices.containsKey(dateStr)) {
+        dateIndices[dateStr] = currentIndex;
+        spots.add(FlSpot(currentIndex.toDouble(), weight));
+        labels.add(dateStr);
+        
+        // Update min and max weights
+        minWeight = minWeight > weight ? weight : minWeight;
+        maxWeight = maxWeight < weight ? weight : maxWeight;
+        
+        currentIndex++;
       }
     }
 
     if (spots.isEmpty) return const SizedBox.shrink();
 
-    return Card(
-      margin: const EdgeInsets.all(16),
+    // Calculate Y-axis range with padding
+    final weightRange = maxWeight - minWeight;
+    final yPadding = weightRange * 0.1; // 10% padding
+    
+    // Round minY down to nearest 0.5 and maxY up to nearest 0.5
+    final minY = (minWeight - yPadding - 0.5).floorToDouble();
+    final maxY = (maxWeight + yPadding + 0.5).ceilToDouble();
+    
+    // Calculate a nice interval (0.5 or 1.0 depending on the range)
+    final interval = (maxY - minY) <= 5 ? 0.5 : 1.0;
+
+    return _buildCard(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpacing),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Weight Progress',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
+            _buildSectionTitle('Weight Progress'),
+            const SizedBox(height: kSpacing / 2),
             SizedBox(
               height: 200,
               child: LineChart(
                 LineChartData(
-                  gridData: FlGridData(show: false),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    horizontalInterval: interval,
+                    getDrawingHorizontalLine: (value) {
+                      return FlLine(
+                        color: kBackgroundColor,
+                        strokeWidth: 1,
+                      );
+                    },
+                  ),
                   titlesData: FlTitlesData(
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 40,
+                        interval: interval,
+                        getTitlesWidget: (value, meta) {
+                          // Only show if it's a multiple of our interval
+                          if ((value % interval).abs() > 0.01) {
+                            return const SizedBox.shrink();
+                          }
+                          return Text(
+                            value.toStringAsFixed(1),
+                            style: const TextStyle(
+                              color: kSecondaryText,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          );
+                        },
                       ),
                     ),
                     rightTitles: AxisTitles(
@@ -328,41 +395,71 @@ class _DashboardPageState extends State<DashboardPage>
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
+                        reservedSize: 22,
+                        interval: 1, // Show every label
                         getTitlesWidget: (value, meta) {
                           final index = value.toInt();
                           if (index < 0 || index >= labels.length) {
                             return const SizedBox.shrink();
                           }
-                          return Text(labels[index]);
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(
+                              labels[index],
+                              style: const TextStyle(
+                                color: kSecondaryText,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          );
                         },
                       ),
                     ),
                   ),
                   minX: 0,
                   maxX: (spots.length - 1).toDouble(),
-                  minY: spots.map((e) => e.y).reduce((a, b) => a < b ? a : b) - 5,
-                  maxY: spots.map((e) => e.y).reduce((a, b) => a > b ? a : b) + 5,
-                  borderData: FlBorderData(show: true),
+                  minY: minY,
+                  maxY: maxY,
+                  borderData: FlBorderData(show: false),
                   lineBarsData: [
                     LineChartBarData(
                       spots: spots,
-                      isCurved: false,
-                      color: Colors.blue,
+                      isCurved: true,
+                      color: kPrimaryBlue,
                       barWidth: 2,
-                      dotData: FlDotData(show: true),
-                      belowBarData: BarAreaData(show: false),
+                      dotData: FlDotData(
+                        show: true,
+                        getDotPainter: (spot, percent, barData, index) {
+                          return FlDotCirclePainter(
+                            radius: 4,
+                            color: Colors.white,
+                            strokeWidth: 2,
+                            strokeColor: kPrimaryBlue,
+                          );
+                        },
+                      ),
+                      belowBarData: BarAreaData(
+                        show: true,
+                        color: kPrimaryBlue.withOpacity(0.1),
+                      ),
                     ),
                   ],
                   lineTouchData: LineTouchData(
                     enabled: true,
                     touchTooltipData: LineTouchTooltipData(
-                      tooltipBgColor: Colors.blueGrey.withOpacity(0.8),
+                      tooltipBgColor: Colors.black.withOpacity(0.8),
+                      tooltipRoundedRadius: 8,
                       getTooltipItems: (List<LineBarSpot> touchedSpots) {
                         return touchedSpots.map((spot) {
-                          final date = DateTime.parse(recentData[spot.x.toInt()]['date'].toString());
+                          final index = spot.x.toInt();
                           return LineTooltipItem(
-                            '${DateFormat('MMM d').format(date)}\n${spot.y.toStringAsFixed(1)} lbs',
-                            const TextStyle(color: Colors.white),
+                            '${labels[index]}\n${spot.y.toStringAsFixed(1)} kg',
+                            const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
                           );
                         }).toList();
                       },
@@ -380,21 +477,13 @@ class _DashboardPageState extends State<DashboardPage>
   Widget _buildDailyGoals() {
     final goals = dashboardData['goals']?['daily'] ?? [];
     
-    return Card(
-      margin: const EdgeInsets.all(16),
+    return _buildCard(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpacing),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Daily Goals',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
+            _buildSectionTitle('Daily Goals'),
             ...goals.map((goal) {
               String unit = '';
               switch(goal['type']) {
@@ -419,14 +508,30 @@ class _DashboardPageState extends State<DashboardPage>
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(goal['type']),
-                        Text('${goal['current'].toStringAsFixed(1)}/${goal['target'].toStringAsFixed(1)}$unit'),
-                      ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            goal['type'],
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black,
+                            ),
+                          ),
+                          Text(
+                            '${goal['current'].toStringAsFixed(1)}/${goal['target'].toStringAsFixed(1)}$unit',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: kPrimaryBlue,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 8),
                   ],
                 );
               }
@@ -436,19 +541,37 @@ class _DashboardPageState extends State<DashboardPage>
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(goal['type']),
-                      Text('${goal['current'].toStringAsFixed(1)}/${goal['target'].toStringAsFixed(1)}$unit'),
-                    ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          goal['type'],
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black,
+                          ),
+                        ),
+                        Text(
+                          '${goal['current'].toStringAsFixed(1)}/${goal['target'].toStringAsFixed(1)}$unit',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: kPrimaryBlue,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  LinearProgressIndicator(
-                    value: progress,
-                    backgroundColor: Colors.grey[200],
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Theme.of(context).primaryColor,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      backgroundColor: kBackgroundColor,
+                      valueColor: const AlwaysStoppedAnimation<Color>(kPrimaryBlue),
+                      minHeight: 6,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -471,20 +594,33 @@ class _DashboardPageState extends State<DashboardPage>
   Widget build(BuildContext context) {
     super.build(context);  // Required by AutomaticKeepAliveClientMixin
     return Scaffold(
+      backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        title: const Text("Dashboard"),
+        backgroundColor: kBackgroundColor,
+        elevation: 0,
+        title: const Text(
+          "Dashboard",
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout),
+            icon: const Icon(Icons.logout, color: kPrimaryBlue),
             onPressed: () => _logout(context),
           ),
         ],
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: kPrimaryBlue))
           : RefreshIndicator(
+              color: kPrimaryBlue,
+              backgroundColor: kCardBackground,
               onRefresh: _fetchDashboardData,
               child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -492,6 +628,7 @@ class _DashboardPageState extends State<DashboardPage>
                     _buildWorkoutCard(),
                     _buildDailyGoals(),
                     _buildWeeklyProgressChart(),
+                    const SizedBox(height: kSpacing), // Bottom padding
                   ],
                 ),
               ),
@@ -499,6 +636,44 @@ class _DashboardPageState extends State<DashboardPage>
       bottomNavigationBar: BottomNavBar(
         currentIndex: getCurrentIndex(context),
         onTap: (index) => handleNavigation(index, context),
+      ),
+    );
+  }
+
+  Widget _buildCard({required Widget child}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: kSpacing,
+        vertical: kSpacing / 2,
+      ),
+      decoration: BoxDecoration(
+        color: kCardBackground,
+        borderRadius: BorderRadius.circular(kBorderRadius),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(kBorderRadius),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: kSpacing),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Colors.black,
+        ),
       ),
     );
   }

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../constants/colors.dart';
 
 class CreateFoodPage extends StatefulWidget {
   const CreateFoodPage({super.key});
@@ -59,12 +61,12 @@ class _CreateFoodPageState extends State<CreateFoodPage> {
         "protein": protein,
         "carbs": carbs,
         "fats": fats,
-        "is_custom": true,  // ✅ Ensure this field is always included
+        "is_custom": true,
       }),
     );
 
     if (response.statusCode == 200) {
-      Navigator.pop(context, true); // Close page and refresh food list
+      Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Food item added successfully!")),
       );
@@ -78,62 +80,112 @@ class _CreateFoodPageState extends State<CreateFoodPage> {
     }
   }
 
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String placeholder,
+    String? suffix,
+    TextInputType? keyboardType,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: CupertinoTextField(
+        controller: controller,
+        placeholder: placeholder,
+        suffix: suffix != null
+            ? Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  suffix,
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              )
+            : null,
+        keyboardType: keyboardType ?? TextInputType.text,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: CupertinoColors.white,
+          border: Border.all(color: CupertinoColors.systemGrey4),
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Manually Add Food")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _foodNameController,
-              decoration: const InputDecoration(labelText: "Food Name"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _servingSizeController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Serving Size (grams)"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _caloriesController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Calories"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _proteinController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Protein (g)"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _carbsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Carbs (g)"),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _fatsController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: "Fats (g)"),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _addFoodItem,
-              child: const Text("Add Food"),
-            ),
-            if (_errorMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(color: Colors.red),
+      backgroundColor: kBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Add Food',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: CupertinoColors.destructiveRed),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                _buildTextField(
+                  controller: _foodNameController,
+                  placeholder: 'Food Name',
                 ),
-              ),
-          ],
+                _buildTextField(
+                  controller: _servingSizeController,
+                  placeholder: 'Serving Size',
+                  suffix: 'grams',
+                  keyboardType: TextInputType.number,
+                ),
+                _buildTextField(
+                  controller: _caloriesController,
+                  placeholder: 'Calories',
+                  suffix: 'kcal',
+                  keyboardType: TextInputType.number,
+                ),
+                _buildTextField(
+                  controller: _proteinController,
+                  placeholder: 'Protein',
+                  suffix: 'g',
+                  keyboardType: TextInputType.number,
+                ),
+                _buildTextField(
+                  controller: _carbsController,
+                  placeholder: 'Carbs',
+                  suffix: 'g',
+                  keyboardType: TextInputType.number,
+                ),
+                _buildTextField(
+                  controller: _fatsController,
+                  placeholder: 'Fats',
+                  suffix: 'g',
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 24),
+                CupertinoButton(
+                  color: kPrimaryBlue,
+                  onPressed: _addFoodItem,
+                  child: const Text('Add Food'),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

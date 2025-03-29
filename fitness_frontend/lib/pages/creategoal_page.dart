@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import '../constants/colors.dart';
 
 class CreateGoalPage extends StatefulWidget {
   const CreateGoalPage({super.key});
@@ -20,6 +22,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
   String? _selectedExercise;
   List<Map<String, dynamic>> _exercises = [];
   bool _isLoadingExercises = false;
+  bool _isCreatingGoal = false;
 
   final List<String> _categories = [
     'weight',
@@ -43,6 +46,18 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
   void initState() {
     super.initState();
     _fetchExercises();
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(color: CupertinoColors.white),
+        ),
+        backgroundColor: isError ? CupertinoColors.destructiveRed : kPrimaryBlue,
+      ),
+    );
   }
 
   Future<void> _fetchExercises() async {
@@ -69,9 +84,7 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
         throw Exception('Failed to load exercises');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading exercises: ${e.toString()}')),
-      );
+      _showSnackBar('Error loading exercises: ${e.toString()}', isError: true);
       setState(() => _isLoadingExercises = false);
     }
   }
@@ -80,14 +93,11 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     setState(() {
       if (_dailyGoals.contains(category)) {
         _selectedTimeFrame = 'daily';
-        // For daily goals, set target date to end of day
         _selectedDate = DateTime.now();
       } else if (_longTermGoals.contains(category)) {
         _selectedTimeFrame = 'long_term';
-        // For long-term goals, set target date to 30 days from now
         _selectedDate = DateTime.now().add(const Duration(days: 30));
       }
-      // Reset selected exercise when changing category
       if (category != 'weightlifting') {
         _selectedExercise = null;
       } else if (_exercises.isNotEmpty) {
@@ -96,30 +106,113 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     });
   }
 
-  String _getTimeFrameDescription() {
-    if (_dailyGoals.contains(_selectedCategory)) {
-      return 'Daily Goal';
-    } else {
-      return 'Target Date';
-    }
+  void _showDatePicker() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) => Container(
+        height: 216,
+        padding: const EdgeInsets.only(top: 6.0),
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        color: CupertinoColors.systemBackground.resolveFrom(context),
+        child: SafeArea(
+          top: false,
+          child: CupertinoDatePicker(
+            initialDateTime: _selectedDate,
+            mode: CupertinoDatePickerMode.date,
+            use24hFormat: true,
+            minimumDate: DateTime.now(),
+            maximumDate: DateTime.now().add(const Duration(days: 365 * 2)),
+            onDateTimeChanged: (DateTime newDate) {
+              setState(() => _selectedDate = newDate);
+            },
+          ),
+        ),
+      ),
+    );
   }
 
-  String _getTargetDescription() {
-    if (_dailyGoals.contains(_selectedCategory)) {
-      return 'Daily Target';
-    } else {
-      return 'Target Value';
-    }
+  void _showCategoryPicker() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) => Container(
+        height: 216,
+        padding: const EdgeInsets.only(top: 6.0),
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        color: CupertinoColors.systemBackground.resolveFrom(context),
+        child: SafeArea(
+          top: false,
+          child: CupertinoPicker(
+            magnification: 1.22,
+            squeeze: 1.2,
+            useMagnifier: true,
+            itemExtent: 32.0,
+            scrollController: FixedExtentScrollController(
+              initialItem: _categories.indexOf(_selectedCategory),
+            ),
+            onSelectedItemChanged: (int selectedItem) {
+              setState(() {
+                _selectedCategory = _categories[selectedItem];
+                _updateTimeFrameBasedOnCategory(_categories[selectedItem]);
+              });
+            },
+            children: _categories.map((category) {
+              return Center(child: Text(category.toUpperCase()));
+            }).toList(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showExercisePicker() {
+    if (_exercises.isEmpty) return;
+    
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (BuildContext context) => Container(
+        height: 216,
+        padding: const EdgeInsets.only(top: 6.0),
+        margin: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        color: CupertinoColors.systemBackground.resolveFrom(context),
+        child: SafeArea(
+          top: false,
+          child: CupertinoPicker(
+            magnification: 1.22,
+            squeeze: 1.2,
+            useMagnifier: true,
+            itemExtent: 32.0,
+            scrollController: FixedExtentScrollController(
+              initialItem: _exercises.indexWhere((e) => e['name'] == _selectedExercise),
+            ),
+            onSelectedItemChanged: (int selectedItem) {
+              setState(() {
+                _selectedExercise = _exercises[selectedItem]['name'] as String;
+              });
+            },
+            children: _exercises.map((exercise) {
+              return Center(child: Text(exercise['name'] as String));
+            }).toList(),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _createGoal() async {
     if (!_formKey.currentState!.validate()) return;
 
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String token = prefs.getString('token') ?? '';
+    setState(() => _isCreatingGoal = true);
 
     try {
-      // For weightlifting goals, combine the type and exercise name in the title
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String token = prefs.getString('token') ?? '';
+
       final goalTitle = _selectedCategory == 'weightlifting' ? 
           '$_selectedCategory:${_selectedExercise}' : _selectedCategory;
 
@@ -142,16 +235,14 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         Navigator.pop(context, true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Goal created successfully')),
-        );
+        _showSnackBar('Goal created successfully');
       } else {
         throw Exception('Failed to create goal');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      _showSnackBar('Error: ${e.toString()}', isError: true);
+    } finally {
+      setState(() => _isCreatingGoal = false);
     }
   }
 
@@ -186,143 +277,193 @@ class _CreateGoalPageState extends State<CreateGoalPage> {
     }
   }
 
+  String _getTargetDescription() {
+    if (_dailyGoals.contains(_selectedCategory)) {
+      return 'Daily Target';
+    } else {
+      return 'Target Value';
+    }
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    String? placeholder,
+    String? suffix,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: CupertinoColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: CupertinoColors.systemGrey5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: kSecondaryText,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 8),
+          CupertinoTextField(
+            controller: controller,
+            placeholder: placeholder,
+            suffix: suffix != null
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(
+                      suffix,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                  )
+                : null,
+            keyboardType: TextInputType.number,
+            decoration: BoxDecoration(
+              border: Border.all(color: CupertinoColors.systemGrey4),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.all(12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectionField({
+    required String label,
+    required String value,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: CupertinoColors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: CupertinoColors.systemGrey5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: kSecondaryText,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    color: CupertinoColors.black,
+                  ),
+                ),
+                const Icon(
+                  CupertinoIcons.chevron_down,
+                  color: CupertinoColors.systemGrey,
+                  size: 20,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        title: const Text('Create New Goal'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: CupertinoButton(
+          padding: EdgeInsets.zero,
+          child: const Icon(
+            CupertinoIcons.back,
+            color: kPrimaryBlue,
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Create Goal',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+      body: SafeArea(
         child: Form(
           key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                decoration: const InputDecoration(
-                  labelText: 'Goal Type',
-                  border: OutlineInputBorder(),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildSelectionField(
+                  label: 'Goal Type',
+                  value: _selectedCategory.toUpperCase(),
+                  onTap: _showCategoryPicker,
                 ),
-                items: _categories.map((category) {
-                  return DropdownMenuItem(
-                    value: category,
-                    child: Text(category.toUpperCase()),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedCategory = value!;
-                    _updateTimeFrameBasedOnCategory(value);
-                  });
-                },
-              ),
-              const SizedBox(height: 16),
-              if (_selectedCategory == 'weightlifting') ...[
-                _isLoadingExercises
-                    ? const Center(child: CircularProgressIndicator())
-                    : DropdownButtonFormField<String>(
-                        value: _selectedExercise,
-                        decoration: const InputDecoration(
-                          labelText: 'Exercise',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: _exercises.map<DropdownMenuItem<String>>((exercise) {
-                          return DropdownMenuItem<String>(
-                            value: exercise['name'] as String,
-                            child: Text(exercise['name'] as String),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedExercise = value!;
-                          });
-                        },
-                      ),
                 const SizedBox(height: 16),
-              ],
-              TextFormField(
-                controller: _targetValueController,
-                decoration: InputDecoration(
-                  labelText: _getTargetDescription(),
-                  helperText: _getHelperText(),
-                  border: const OutlineInputBorder(),
-                  suffixText: _getUnitForCategory(_selectedCategory),
+                if (_selectedCategory == 'weightlifting') ...[
+                  if (_isLoadingExercises)
+                    const Center(child: CupertinoActivityIndicator())
+                  else
+                    _buildSelectionField(
+                      label: 'Exercise',
+                      value: _selectedExercise ?? 'Select Exercise',
+                      onTap: _showExercisePicker,
+                    ),
+                  const SizedBox(height: 16),
+                ],
+                _buildInputField(
+                  controller: _targetValueController,
+                  label: _getTargetDescription(),
+                  placeholder: _getHelperText(),
+                  suffix: _getUnitForCategory(_selectedCategory),
                 ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter a target value';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Please enter a valid number';
-                  }
-                  return null;
-                },
-              ),
-              if (_selectedCategory == 'weight') ...[
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _currentValueController,
-                  decoration: const InputDecoration(
-                    labelText: 'Today\'s Weight',
-                    border: OutlineInputBorder(),
-                    suffixText: 'kg',
-                    helperText: 'Enter your current weight for today',
+                if (_selectedCategory == 'weight') ...[
+                  const SizedBox(height: 16),
+                  _buildInputField(
+                    controller: _currentValueController,
+                    label: "Today's Weight",
+                    placeholder: 'Enter your current weight',
+                    suffix: 'kg',
                   ),
-                  keyboardType: TextInputType.number,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your current weight';
-                    }
-                    if (double.tryParse(value) == null) {
-                      return 'Please enter a valid number';
-                    }
-                    return null;
-                  },
-                ),
-              ],
-              const SizedBox(height: 16),
-              if (!_dailyGoals.contains(_selectedCategory)) ...[
-                ListTile(
-                  title: Text(_getTimeFrameDescription()),
-                  subtitle: Text(
-                    '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}',
+                ],
+                if (!_dailyGoals.contains(_selectedCategory)) ...[
+                  const SizedBox(height: 16),
+                  _buildSelectionField(
+                    label: 'Target Date',
+                    value: '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}',
+                    onTap: _showDatePicker,
                   ),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final DateTime? picked = await showDatePicker(
-                      context: context,
-                      initialDate: _selectedDate,
-                      firstDate: DateTime.now(),
-                      lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
-                    );
-                    if (picked != null) {
-                      setState(() {
-                        _selectedDate = picked;
-                      });
-                    }
-                  },
-                ),
-              ] else ...[
-                ListTile(
-                  title: Text(_getTimeFrameDescription()),
-                  subtitle: _selectedCategory == 'weight' 
-                      ? const Text('Track your weight daily')
-                      : const Text('Resets daily at midnight'),
-                  leading: const Icon(Icons.refresh),
-                ),
+                ],
+                const SizedBox(height: 32),
+                if (_isCreatingGoal)
+                  const Center(child: CupertinoActivityIndicator())
+                else
+                  CupertinoButton(
+                    color: kPrimaryBlue,
+                    onPressed: _createGoal,
+                    child: const Text('Create Goal'),
+                  ),
               ],
-              const SizedBox(height: 32),
-              ElevatedButton(
-                onPressed: _createGoal,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text('Create Goal'),
-              ),
-            ],
+            ),
           ),
         ),
       ),

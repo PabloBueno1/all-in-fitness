@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:async'; // Add Timer import
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
+import '../constants/colors.dart';
 
 class MealsPage extends StatefulWidget {
   const MealsPage({super.key});
@@ -300,42 +302,53 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
     final nameController = TextEditingController(text: meal['name']);
     final dateController = TextEditingController(text: meal['date']);
 
-    showDialog(
+    showCupertinoModalPopup(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Meal'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Meal Name'),
-              ),
-              TextField(
-                controller: dateController,
-                decoration: const InputDecoration(labelText: 'Date (YYYY-MM-DD)'),
-                onTap: () async {
-                  final DateTime? picked = await showDatePicker(
-                    context: context,
-                    initialDate: DateTime.tryParse(meal['date']) ?? DateTime.now(),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime(2100),
-                  );
-                  if (picked != null) {
-                    dateController.text = picked.toIso8601String().split('T')[0];
-                  }
-                },
-              ),
-            ],
-          ),
+      builder: (context) => CupertinoActionSheet(
+        title: Text('Edit ${meal['name']}'),
+        message: Column(
+          children: [
+            CupertinoTextField(
+              controller: nameController,
+              placeholder: 'Meal Name',
+              padding: const EdgeInsets.all(12),
+            ),
+            const SizedBox(height: 8),
+            CupertinoTextField(
+              controller: dateController,
+              placeholder: 'Date (YYYY-MM-DD)',
+              padding: const EdgeInsets.all(12),
+              onTap: () async {
+                final DateTime? picked = await showCupertinoModalPopup(
+                  context: context,
+                  builder: (BuildContext context) => Container(
+                    height: 216,
+                    padding: const EdgeInsets.only(top: 6.0),
+                    margin: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom,
+                    ),
+                    color: CupertinoColors.systemBackground.resolveFrom(context),
+                    child: SafeArea(
+                      top: false,
+                      child: CupertinoDatePicker(
+                        initialDateTime: DateTime.tryParse(meal['date']) ?? DateTime.now(),
+                        mode: CupertinoDatePickerMode.date,
+                        onDateTimeChanged: (DateTime newDate) {
+                          dateController.text = newDate.toIso8601String().split('T')[0];
+                        },
+                      ),
+                    ),
+                  ),
+                );
+                if (picked != null) {
+                  dateController.text = picked.toIso8601String().split('T')[0];
+                }
+              },
+            ),
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
+          CupertinoActionSheetAction(
             onPressed: () {
               _updateMeal(
                 meal['id'],
@@ -347,6 +360,11 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
             child: const Text('Save'),
           ),
         ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          isDestructiveAction: true,
+          child: const Text('Cancel'),
+        ),
       ),
     );
   }
@@ -354,25 +372,21 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
   Future<void> _showBarcodeInputDialog(BuildContext context, int mealId) {
     final barcodeController = TextEditingController();
     
-    return showDialog(
+    return showCupertinoModalPopup(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => CupertinoActionSheet(
         title: const Text('Enter Barcode'),
-        content: TextField(
-          controller: barcodeController,
-          decoration: const InputDecoration(
-            labelText: 'Barcode Number',
-            hintText: 'Enter product barcode',
-            border: OutlineInputBorder(),
+        message: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0),
+          child: CupertinoTextField(
+            controller: barcodeController,
+            placeholder: 'Enter product barcode',
+            keyboardType: TextInputType.number,
+            padding: const EdgeInsets.all(12),
           ),
-          keyboardType: TextInputType.number,
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
+          CupertinoActionSheetAction(
             onPressed: () async {
               if (barcodeController.text.isNotEmpty) {
                 SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -390,10 +404,8 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
                   final List<dynamic> results = json.decode(response.body);
                   if (results.isNotEmpty) {
                     final food = results[0];
-                    // Close the barcode dialog first
                     Navigator.pop(context);
                     
-                    // Navigate to food details page
                     final result = await Navigator.pushNamed(
                       context,
                       '/food-details',
@@ -403,7 +415,6 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
                       },
                     );
 
-                    // Refresh meal food items if food was successfully added
                     if (result == true) {
                       _fetchMealFoodItems(mealId);
                     }
@@ -429,6 +440,11 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
             child: const Text('Search'),
           ),
         ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          isDestructiveAction: true,
+          child: const Text('Cancel'),
+        ),
       ),
     );
   }
@@ -436,41 +452,21 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Meals")),
+      backgroundColor: kBackgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Meals',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
       body: Column(
         children: [
-          const SizedBox(height: 20),
-          const Text("Your Meals:", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-
-          // Buttons for Creating Meal & Food
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed: () async {
-                    final result = await Navigator.pushNamed(context, '/create-meal');
-                    if (result == true) {
-                      _fetchMeals();
-                    }
-                  },
-                  child: const Text("Create Meal"),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final result = await Navigator.pushNamed(context, '/add-food');
-                    if (result == true) {
-                      _fetchMeals();
-                    }
-                  },
-                  child: const Text("Create Food"),
-                ),
-              ],
-            ),
-          ),
-
-          // Meals List
           Expanded(
             child: ListView.builder(
               itemCount: meals.length,
@@ -478,202 +474,444 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
                 final meal = meals[index];
                 final mealId = meal['id'];
 
-                return Card(
-                  elevation: 2,
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: ExpansionTile(
-                    title: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(meal['name']),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.blue),
-                          onPressed: () => _showEditMealDialog(meal),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.red),
-                          onPressed: () => _deleteMeal(mealId),
-                        ),
-                      ],
-                    ),
-                    subtitle: Text("Date: ${meal['date']}"),
-                    leading: const Icon(Icons.restaurant_menu, color: Colors.blue),
-                    trailing: const Icon(Icons.expand_more, color: Colors.grey),
-                    childrenPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8.0),
-                    ),
-                    collapsedShape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8.0),
-                    ),
-                    children: [
-                      // 🍽️ Meal's Food List
-                      Column(
-                        children: mealFoodItems[mealId]?.map<Widget>((food) {
-                          int foodId = food['food_id'];
-                          double totalCalories = food['quantity'] * food['calories_per_item'];
-                          return ListTile(
-                            title: Text(food['food_name']),
-                            subtitle: Text("Total Calories: ${totalCalories.toStringAsFixed(2)}"),
-                            leading: const Icon(Icons.edit, color: Colors.blue),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.remove_circle, color: Colors.red),
-                              onPressed: () => _removeFoodFromMeal(mealId, foodId),
-                            ),
-                            tileColor: Colors.grey[50],
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            onTap: () async {
-                              final result = await Navigator.pushNamed(
-                                context,
-                                '/food-details',
-                                arguments: {
-                                  'food': food,
-                                  'mealId': mealId,
-                                },
-                              );
-
-                              // ✅ Refresh meal food items if food was successfully added
-                              if (result == true) {
-                                _fetchMealFoodItems(mealId);
-                              }
-                            },
-                          );
-                        }).toList() ??
-                        [],
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 2),
                       ),
-
-                      // 🔍 Search Bar Inside Meal
-                      Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                decoration: const InputDecoration(
-                                  labelText: "Search Food to Add",
-                                  border: OutlineInputBorder(),
-                                  suffixIcon: Icon(Icons.search),
+                    ],
+                  ),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      title: Row(
+                        children: [
+                          Icon(CupertinoIcons.cart_fill,
+                              color: kPrimaryBlue, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  meal['name'],
+                                  style: const TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black,
+                                  ),
                                 ),
-                                onChanged: (value) {
-                                  // Cancel any existing timer for this meal
-                                  _searchDebounceTimers[mealId]?.cancel();
-
-                                  setState(() {
-                                    mealSearchQueries[mealId] = value;
-                                    if (value.isEmpty) {
-                                      isSearchingMeal[mealId] = false;
-                                      _searchFutures[mealId] = Future.value([]);
-                                    } else {
-                                      isSearchingMeal[mealId] = true;
+                                Text(
+                                  "Date: ${meal['date']}",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey[600],
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            child: Icon(
+                              CupertinoIcons.ellipsis,
+                              color: Colors.grey[400],
+                            ),
+                            onPressed: () {
+                              showCupertinoModalPopup(
+                                context: context,
+                                builder: (context) => CupertinoActionSheet(
+                                  actions: [
+                                    CupertinoActionSheetAction(
+                                      child: const Text('Edit Meal'),
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        _showEditMealDialog(meal);
+                                      },
+                                    ),
+                                    CupertinoActionSheetAction(
+                                      isDestructiveAction: true,
+                                      child: const Text('Delete Meal'),
+                                      onPressed: () {
+                                        Navigator.pop(context);
+                                        _deleteMeal(mealId);
+                                      },
+                                    ),
+                                  ],
+                                  cancelButton: CupertinoActionSheetAction(
+                                    child: const Text('Cancel'),
+                                    onPressed: () => Navigator.pop(context),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                      children: [
+                        Column(
+                          children: [
+                            ...(mealFoodItems[mealId]?.map<Widget>((food) {
+                              int foodId = food['food_id'];
+                              double totalCalories = food['quantity'] * food['calories_per_item'];
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[50],
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: CupertinoListTile(
+                                  title: Text(
+                                    food['food_name'],
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    "Total Calories: ${totalCalories.toStringAsFixed(2)}",
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  leading: Icon(CupertinoIcons.pencil_circle,
+                                      color: kPrimaryBlue),
+                                  trailing: CupertinoButton(
+                                    padding: EdgeInsets.zero,
+                                    child: Icon(CupertinoIcons.minus_circle,
+                                        color: Colors.red[400]),
+                                    onPressed: () => _removeFoodFromMeal(mealId, foodId),
+                                  ),
+                                  onTap: () async {
+                                    final result = await Navigator.pushNamed(
+                                      context,
+                                      '/food-details',
+                                      arguments: {
+                                        'food': food,
+                                        'mealId': mealId,
+                                      },
+                                    );
+                                    if (result == true) {
+                                      _fetchMealFoodItems(mealId);
                                     }
-                                  });
-
-                                  if (value.isNotEmpty) {
-                                    // Start a new timer
-                                    _searchDebounceTimers[mealId] = Timer(const Duration(milliseconds: 500), () {
-                                      if (mounted) {
+                                  },
+                                ),
+                              );
+                            }).toList() ?? []),
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: CupertinoSearchTextField(
+                                      placeholder: "Search Food to Add",
+                                      onChanged: (value) {
+                                        _searchDebounceTimers[mealId]?.cancel();
                                         setState(() {
-                                          // Store the future for this search
-                                          _searchFutures[mealId] = searchFoodItems(value);
+                                          mealSearchQueries[mealId] = value;
+                                          if (value.isEmpty) {
+                                            isSearchingMeal[mealId] = false;
+                                            _searchFutures[mealId] = Future.value([]);
+                                          } else {
+                                            isSearchingMeal[mealId] = true;
+                                          }
                                         });
-                                      }
-                                    });
+
+                                        if (value.isNotEmpty) {
+                                          _searchDebounceTimers[mealId] = Timer(
+                                            const Duration(milliseconds: 500),
+                                            () {
+                                              if (mounted) {
+                                                setState(() {
+                                                  _searchFutures[mealId] =
+                                                      searchFoodItems(value);
+                                                });
+                                              }
+                                            },
+                                          );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  CupertinoButton(
+                                    padding: EdgeInsets.zero,
+                                    child: Icon(CupertinoIcons.barcode_viewfinder,
+                                        color: kPrimaryBlue),
+                                    onPressed: () =>
+                                        _showBarcodeInputDialog(context, mealId),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isSearchingMeal[mealId] == true)
+                              FutureBuilder<List<Map<String, dynamic>>>(
+                                future: _searchFutures[mealId] ?? Future.value([]),
+                                builder: (context, snapshot) {
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(20),
+                                      child: CupertinoActivityIndicator(),
+                                    );
+                                  } else if (snapshot.hasError) {
+                                    return Padding(
+                                      padding: const EdgeInsets.all(20),
+                                      child: Text(
+                                        'Error: ${snapshot.error}',
+                                        style: const TextStyle(color: Colors.red),
+                                      ),
+                                    );
+                                  } else if (!snapshot.hasData ||
+                                      snapshot.data!.isEmpty) {
+                                    return const Padding(
+                                      padding: EdgeInsets.all(20),
+                                      child: Text('No food found.'),
+                                    );
+                                  } else {
+                                    return ListView.builder(
+                                      shrinkWrap: true,
+                                      physics: const NeverScrollableScrollPhysics(),
+                                      itemCount: snapshot.data!.length,
+                                      itemBuilder: (context, index) {
+                                        final food = snapshot.data![index];
+                                        return Container(
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 16, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[50],
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: CupertinoListTile(
+                                            title: Text(
+                                              food['name'],
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            trailing: CupertinoButton(
+                                              padding: EdgeInsets.zero,
+                                              child: Text(
+                                                'Add',
+                                                style: TextStyle(
+                                                    color: kPrimaryBlue),
+                                              ),
+                                              onPressed: () async {
+                                                bool isAlreadyAdded =
+                                                    mealFoodItems[mealId]?.any(
+                                                            (item) =>
+                                                                item['food_id'] ==
+                                                                food['id']) ??
+                                                        false;
+
+                                                if (isAlreadyAdded) {
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    const SnackBar(
+                                                      content: Text(
+                                                          "This food is already in the meal. Tap on it to edit the quantity."),
+                                                    ),
+                                                  );
+                                                  return;
+                                                }
+
+                                                if (food['id'] == 0) {
+                                                  final savedFood =
+                                                      await addFoodToDB(food);
+                                                  if (savedFood != null) {
+                                                    _addFoodToMeal(
+                                                        mealId,
+                                                        savedFood['id'],
+                                                        1.0);
+                                                  }
+                                                } else {
+                                                  _addFoodToMeal(
+                                                      mealId, food['id'], 1.0);
+                                                }
+                                              },
+                                            ),
+                                            onTap: () async {
+                                              final result =
+                                                  await Navigator.pushNamed(
+                                                context,
+                                                '/food-details',
+                                                arguments: {
+                                                  'food': food,
+                                                  'mealId': mealId,
+                                                },
+                                              );
+                                              if (result == true) {
+                                                _fetchMealFoodItems(mealId);
+                                              }
+                                            },
+                                          ),
+                                        );
+                                      },
+                                    );
                                   }
                                 },
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton(
-                              icon: const Icon(Icons.qr_code_scanner),
-                              onPressed: () {
-                                _showBarcodeInputDialog(context, mealId);
-                              },
-                              tooltip: 'Scan Barcode',
-                            ),
                           ],
                         ),
-                      ),
-
-                      // 🔄 Meal-specific Search Results
-                      isSearchingMeal[mealId] == true
-                          ? FutureBuilder<List<Map<String, dynamic>>>(
-                              future: _searchFutures[mealId] ?? Future.value([]),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.waiting) {
-                                  return const CircularProgressIndicator();
-                                } else if (snapshot.hasError) {
-                                  return Text('Error: ${snapshot.error}');
-                                } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                                  return const Text('No food found.');
-                                } else {
-                                  return ListView.builder(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: snapshot.data!.length,
-                                    itemBuilder: (context, index) {
-                                      final food = snapshot.data![index];
-                                      return ListTile(
-                                        title: Text(food['name']),
-                                        onTap: () async {
-                                          final result = await Navigator.pushNamed(
-                                            context,
-                                            '/food-details',
-                                            arguments: {
-                                              'food': food,
-                                              'mealId': mealId,
-                                            },
-                                          );
-
-                                          // ✅ Refresh meal food items if food was successfully added
-                                          if (result == true) {
-                                            _fetchMealFoodItems(mealId);
-                                          }
-                                        },
-                                        trailing: ElevatedButton(
-                                          child: const Text("Add"),
-                                          onPressed: () async {
-                                            // Check if food is already in the meal
-                                            bool isAlreadyAdded = mealFoodItems[mealId]?.any((item) => item['food_id'] == food['id']) ?? false;
-                                            
-                                            if (isAlreadyAdded) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(
-                                                  content: Text("This food is already in the meal. Tap on it to edit the quantity."),
-                                                ),
-                                              );
-                                              return;
-                                            }
-
-                                            if (food['id'] == 0) {
-                                              // If the food item comes from USDA, save it to the database first
-                                              final savedFood = await addFoodToDB(food);
-                                              if (savedFood != null) {
-                                                _addFoodToMeal(mealId, savedFood['id'], 1.0); // Use the new ID from DB
-                                              }
-                                            } else {
-                                              // If it's already in DB, directly add it to the meal
-                                              _addFoodToMeal(mealId, food['id'], 1.0);
-                                            }
-                                          },
-                                        ),
-                                      );
-                                    },
-                                  );
-                                }
-                              },
-                            )
-                          : const SizedBox(),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },
             ),
           ),
         ],
+      ),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: kPrimaryBlue.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () {
+            final RenderBox button = context.findRenderObject() as RenderBox;
+            final position = button.localToGlobal(Offset.zero);
+            
+            showCupertinoModalPopup(
+              context: context,
+              barrierDismissible: true,
+              builder: (context) => TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOutBack,
+                builder: (context, value, child) {
+                  return Transform.scale(
+                    scale: value,
+                    child: Positioned(
+                      top: position.dy - 220,
+                      right: 16,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          width: 220,
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 10,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                decoration: BoxDecoration(
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Colors.grey[200]!,
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text(
+                                      'Add New',
+                                      style: TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                    CupertinoButton(
+                                      padding: EdgeInsets.zero,
+                                      child: const Icon(CupertinoIcons.xmark),
+                                      onPressed: () => Navigator.pop(context),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              CupertinoButton(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                pressedOpacity: 0.7,
+                                color: Colors.transparent,
+                                child: Row(
+                                  children: [
+                                    Icon(CupertinoIcons.cart_fill, color: kPrimaryBlue),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Create Meal',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                  final result = await Navigator.pushNamed(context, '/create-meal');
+                                  if (result == true) {
+                                    _fetchMeals();
+                                  }
+                                },
+                              ),
+                              CupertinoButton(
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                                pressedOpacity: 0.7,
+                                color: Colors.transparent,
+                                child: Row(
+                                  children: [
+                                    Icon(CupertinoIcons.plus_circle_fill, color: kPrimaryBlue),
+                                    const SizedBox(width: 12),
+                                    const Text(
+                                      'Create Food Item',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                onPressed: () async {
+                                  Navigator.pop(context);
+                                  final result = await Navigator.pushNamed(
+                                    context,
+                                    '/food-details',
+                                  );
+                                  if (result == true) {
+                                    _fetchFoodItems();
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+          backgroundColor: kPrimaryBlue,
+          child: const Icon(CupertinoIcons.add),
+        ),
       ),
       bottomNavigationBar: BottomNavBar(
         currentIndex: getCurrentIndex(context),
