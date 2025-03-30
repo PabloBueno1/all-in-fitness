@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import '../constants/colors.dart';
+import 'package:intl/intl.dart';
 
 class GoalsPage extends StatefulWidget {
   const GoalsPage({super.key});
@@ -17,6 +18,7 @@ class GoalsPage extends StatefulWidget {
 class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
   List<Map<String, dynamic>> goals = [];
   bool isLoading = true;
+  DateTime selectedDate = DateTime.now();
 
   // Define which categories are daily goals
   final Set<String> _dailyGoals = {'calories', 'steps', 'protein', 'carbs', 'fats', 'weight'};
@@ -40,6 +42,8 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
+        print('Fetched ${data.length} goals from backend');
+        
         setState(() {
           goals = data.map((goal) {
             final goalType = goal['goal_type'] as String;
@@ -47,13 +51,11 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
             final exerciseName = isWeightlifting ? 
                 goalType.split(':')[1] : null;
             final baseGoalType = isWeightlifting ? 'weightlifting' : goalType;
-            final isDaily = _dailyGoals.contains(baseGoalType.toLowerCase());
 
-            // For daily goals, set deadline to end of current day
-            final now = DateTime.now();
-            final endOfDay = DateTime(now.year, now.month, now.day, 23, 59, 59);
-            final deadline = isDaily ? endOfDay.toIso8601String().split('T')[0] : 
-                (goal['target_date'] ?? DateTime.now().add(const Duration(days: 30)).toIso8601String().split('T')[0]);
+            // Just use the date directly from the backend without modification
+            final deadline = goal['start_date'] ?? goal['target_date'] ?? '';
+            
+            print('Processing goal: $baseGoalType with date $deadline');
 
             return {
               'id': goal['id'],
@@ -79,6 +81,84 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
       );
       setState(() => isLoading = false);
     }
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != selectedDate) {
+      setState(() {
+        selectedDate = picked;
+      });
+      _fetchGoals();
+    }
+  }
+
+  void _navigateDate(bool forward) {
+    setState(() {
+      if (forward) {
+        selectedDate = selectedDate.add(const Duration(days: 1));
+      } else {
+        selectedDate = selectedDate.subtract(const Duration(days: 1));
+      }
+    });
+    _fetchGoals();
+  }
+
+  Widget _buildDateSelector() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  child: const Icon(CupertinoIcons.chevron_left),
+                  onPressed: () => _navigateDate(false),
+                ),
+                Text(
+                  DateFormat('MMMM d, y').format(selectedDate),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black,
+                  ),
+                ),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  child: const Icon(CupertinoIcons.chevron_right),
+                  onPressed: () => _navigateDate(true),
+                ),
+              ],
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              child: const Icon(CupertinoIcons.calendar),
+              onPressed: () => _selectDate(context),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   String _getGoalDescription(Map<String, dynamic> goal) {
@@ -284,14 +364,14 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
   }
 
   List<Map<String, dynamic>> _getDailyGoals() {
-    final today = DateTime.now();
-    final todayStr = today.toIso8601String().split('T')[0];
-    
-    return goals.where((goal) {
+    final selectedDateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+    final filteredGoals = goals.where((goal) {
       final baseGoalType = goal['goal_type'].toString().split(':')[0];
+      final goalDate = goal['deadline'] as String;
       return _dailyGoals.contains(baseGoalType.toLowerCase()) && 
-             goal['deadline'] == todayStr;
+             goalDate == selectedDateStr;
     }).toList();
+    return filteredGoals;
   }
 
   List<Map<String, dynamic>> _getNonDailyGoals() {
@@ -478,11 +558,12 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildDateSelector(),
               if (dailyGoals.isNotEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                   child: Text(
-                    'Today\'s Goals',
+                    'Daily Goals',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -513,7 +594,7 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
                     children: [
                       const SizedBox(height: 40),
                       Text(
-                        'No goals yet',
+                        'No goals for this date',
                         style: TextStyle(
                           fontSize: 17,
                           color: Colors.grey[600],

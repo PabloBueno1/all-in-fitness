@@ -163,35 +163,32 @@ def get_user_goals(
     """Get all goals for the current user"""
     today = date.today()
     
-    # Check if we have any daily goals for today
-    has_todays_daily_goals = db.query(Goal).filter(
-        Goal.user_id == current_user.id,
-        Goal.goal_type.in_(DAILY_GOALS),
-        Goal.start_date == today
-    ).first() is not None
-    
-    # Only create daily goals if we don't have any for today and user has previously set up daily goals
-    if not has_todays_daily_goals:
-        has_previous_daily_goals = db.query(Goal).filter(
-            Goal.user_id == current_user.id,
-            Goal.goal_type.in_(DAILY_GOALS)
-        ).first() is not None
-        
-        if has_previous_daily_goals:
-            create_daily_goals(current_user, db)
-    
-    # Get today's daily goals
+    # Get all daily goals (both current and historical)
     daily_goals = db.query(Goal).filter(
         Goal.user_id == current_user.id,
-        Goal.goal_type.in_(DAILY_GOALS),
-        Goal.start_date == today
-    ).all()
+        Goal.goal_type.in_(DAILY_GOALS)
+    ).order_by(Goal.start_date.desc()).all()
     
     # Get all non-daily goals
     non_daily_goals = db.query(Goal).filter(
         Goal.user_id == current_user.id,
         ~Goal.goal_type.in_(DAILY_GOALS)
     ).all()
+    
+    # Check if we need to create today's daily goals
+    has_todays_daily_goals = any(
+        goal.start_date == today and goal.goal_type in DAILY_GOALS 
+        for goal in daily_goals
+    )
+    
+    # Only create daily goals if we don't have any for today and user has previously set up daily goals
+    if not has_todays_daily_goals and daily_goals:  # daily_goals check ensures user has previous goals
+        create_daily_goals(current_user, db)
+        # Refresh daily goals to include newly created ones
+        daily_goals = db.query(Goal).filter(
+            Goal.user_id == current_user.id,
+            Goal.goal_type.in_(DAILY_GOALS)
+        ).order_by(Goal.start_date.desc()).all()
     
     # Combine and return both sets of goals
     return daily_goals + non_daily_goals
