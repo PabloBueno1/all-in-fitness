@@ -18,6 +18,34 @@ class _LoginPageState extends State<LoginPage> {
   String? errorMessage;
   bool _isLoading = false;
 
+  Future<void> _checkProfile(String token) async {
+    try {
+      final response = await http.get(
+        Uri.parse('http://localhost:8000/users/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        // User has a profile, go to dashboard
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        }
+      } else if (response.statusCode == 404) {
+        // User needs to create a profile
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/profile');
+        }
+      }
+    } catch (e) {
+      print('Error checking profile: $e');
+      if (mounted) {
+        Navigator.pushReplacementNamed(context, '/dashboard');
+      }
+    }
+  }
+
   Future<void> login() async {
     setState(() {
       _isLoading = true;
@@ -41,9 +69,8 @@ class _LoginPageState extends State<LoginPage> {
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.setString('token', token);
 
-        if (mounted) {
-          Navigator.pushReplacementNamed(context, '/dashboard');
-        }
+        // Check if user has a profile
+        await _checkProfile(token);
       } else {
         setState(() {
           errorMessage = 'Invalid email or password';

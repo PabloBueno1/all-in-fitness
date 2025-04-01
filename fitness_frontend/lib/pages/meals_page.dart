@@ -7,6 +7,7 @@ import 'dart:async'; // Add Timer import
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import '../constants/colors.dart';
+import '../widgets/user_profile_menu.dart';
 
 class MealsPage extends StatefulWidget {
   const MealsPage({super.key});
@@ -23,6 +24,7 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
   Map<int, bool> isSearchingMeal = {}; // For tracking search status per meal
   Map<int, Timer?> _searchDebounceTimers = {}; // Add debounce timers map
   Map<int, Future<List<Map<String, dynamic>>>> _searchFutures = {}; // Store search futures
+  String? username;
 
   final String searchApiUrl = 'http://localhost:8000/food_items/search';
   final String postApiUrl = 'http://localhost:8000/food_items';
@@ -30,6 +32,7 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
   @override
   void initState() {
     super.initState();
+    _fetchUserData();
     _fetchMeals();
   }
 
@@ -40,6 +43,30 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
       timer?.cancel();
     }
     super.dispose();
+  }
+
+  Future<void> _fetchUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('http://localhost:8000/users/me'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          username = data['name'];
+        });
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
+    }
   }
 
   /// ✅ Fetch Meals
@@ -464,6 +491,13 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          if (username != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: UserProfileMenu(username: username!),
+            ),
+        ],
       ),
       body: Column(
         children: [

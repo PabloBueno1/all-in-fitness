@@ -7,6 +7,7 @@ import 'dart:async'; // Add Timer import
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import '../constants/colors.dart';
+import '../widgets/user_profile_menu.dart';
 
 class WorkoutsPage extends StatefulWidget {
   const WorkoutsPage({super.key});
@@ -25,6 +26,7 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
   Map<int, Timer?> _searchDebounceTimers = {}; // Add debounce timers map
   Map<int, Future<List<Map<String, dynamic>>>> _searchFutures = {}; // Store search futures
   final int defaultSets = 3;
+  String? username;
 
   final String searchApiUrl = 'http://localhost:8000/exercise_types/search';
   final String postApiUrl = 'http://localhost:8000/exercise_types';
@@ -32,6 +34,7 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
   @override
   void initState() {
     super.initState();
+    _fetchUserData();
     _fetchWorkouts();
   }
 
@@ -205,8 +208,29 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
 
     if (response.statusCode == 200) {
       List decodedResponse = json.decode(response.body);
+      // Add exercise type details to each exercise
+      List enrichedExercises = [];
+      for (var exercise in decodedResponse) {
+        final exerciseTypeResponse = await http.get(
+          Uri.parse('http://localhost:8000/exercise_types/${exercise['exercise_id']}'),
+          headers: {'Authorization': 'Bearer $token'},
+        );
+        
+        if (exerciseTypeResponse.statusCode == 200) {
+          final exerciseType = json.decode(exerciseTypeResponse.body);
+          enrichedExercises.add({
+            ...exercise,
+            'muscles': exerciseType['muscles'],
+            'description': exerciseType['description'],
+            'category': exerciseType['category'],
+          });
+        } else {
+          enrichedExercises.add(exercise);
+        }
+      }
+      
       setState(() {
-        workoutExercises[workoutId] = decodedResponse;
+        workoutExercises[workoutId] = enrichedExercises;
       });
     } else {
       setState(() {
@@ -246,7 +270,7 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
       body: json.encode({
         "workout_id": workoutId,
         "exercise_id": dbExercise['id'],
-        "sets": defaultSets,
+        "sets": exercise['sets'] ?? defaultSets,  // Use custom sets if provided, otherwise use default
       }),
     );
 
@@ -454,6 +478,30 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
     );
   }
 
+  Future<void> _fetchUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('http://localhost:8000/users/me'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          username = data['name'];
+        });
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -469,6 +517,13 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          if (username != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: UserProfileMenu(username: username!),
+            ),
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -634,8 +689,9 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
                                                   return Container(
                                                     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                                                     decoration: BoxDecoration(
-                                                      color: Colors.grey[50],
+                                                      color: Colors.white,
                                                       borderRadius: BorderRadius.circular(8),
+                                                      border: Border.all(color: Colors.grey[200]!),
                                                     ),
                                                     child: CupertinoListTile(
                                                       title: Text(
@@ -645,24 +701,58 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
                                                           fontWeight: FontWeight.w500,
                                                         ),
                                                       ),
-                                                      trailing: CupertinoButton(
-                                                        padding: EdgeInsets.zero,
-                                                        child: Text(
-                                                          'Add',
-                                                          style: TextStyle(color: kPrimaryBlue),
-                                                        ),
-                                                        onPressed: () {
-                                                          final sanitizedExercise = {
-                                                            'id': exercise['id'] ?? 0,
-                                                            'name': exercise['name'] ?? 'Unnamed Exercise',
-                                                            'category': exercise['category'] ?? 'Uncategorized',
+                                                      trailing: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          CupertinoButton(
+                                                            padding: EdgeInsets.zero,
+                                                            child: Text(
+                                                              'Quick Add',
+                                                              style: TextStyle(color: kPrimaryBlue),
+                                                            ),
+                                                            onPressed: () {
+                                                              final sanitizedExercise = {
+                                                                'id': exercise['id'] ?? 0,
+                                                                'name': exercise['name'] ?? 'Unnamed Exercise',
+                                                                'category': exercise['category'] ?? 'Uncategorized',
+                                                                'muscles': exercise['muscles'] ?? '',
+                                                                'description': exercise['description'] ?? '',
+                                                                'is_predefined': exercise['is_predefined'] ?? false,
+                                                              };
+                                                              _addExerciseToWorkout(workoutId, sanitizedExercise);
+                                                            },
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      onTap: () async {
+                                                        // Navigate to exercise log page for custom set adding
+                                                        final sanitizedExercise = {
+                                                          'id': exercise['id'] ?? 0,
+                                                          'name': exercise['name'] ?? 'Unnamed Exercise',
+                                                          'category': exercise['category'] ?? 'Uncategorized',
+                                                          'muscles': exercise['muscles'] ?? '',
+                                                          'description': exercise['description'] ?? '',
+                                                          'is_predefined': exercise['is_predefined'] ?? false,
+                                                        };
+                                                        
+                                                        final result = await Navigator.pushNamed(
+                                                          context,
+                                                          '/exercise-log',
+                                                          arguments: {
+                                                            'workoutId': workoutId,
+                                                            'isNewExercise': true,
+                                                            'exerciseToAdd': sanitizedExercise,
+                                                            'exerciseName': exercise['name'] ?? 'Unnamed Exercise',
                                                             'muscles': exercise['muscles'] ?? '',
                                                             'description': exercise['description'] ?? '',
-                                                            'is_predefined': exercise['is_predefined'] ?? false,
-                                                          };
-                                                          _addExerciseToWorkout(workoutId, sanitizedExercise);
-                                                        },
-                                                      ),
+                                                            'category': exercise['category'] ?? 'Uncategorized',
+                                                          },
+                                                        );
+
+                                                        if (result == true) {
+                                                          _fetchWorkoutExercises(workoutId);
+                                                        }
+                                                      },
                                                     ),
                                                   );
                                                 },
@@ -725,6 +815,9 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
                                                   'exerciseId': exercise['exercise_id'],
                                                   'exerciseName': exercise['exercise_name'],
                                                   'setCap': exercise['sets'],
+                                                  'muscles': exercise['muscles'] ?? '',
+                                                  'description': exercise['description'] ?? '',
+                                                  'category': exercise['category'] ?? 'Uncategorized',
                                                 },
                                               );
 

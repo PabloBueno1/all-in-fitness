@@ -7,6 +7,8 @@ import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import '../constants/colors.dart';
 import 'package:intl/intl.dart';
+import '../widgets/user_profile_menu.dart';
+import '../widgets/goal_recommendations_card.dart';
 
 class GoalsPage extends StatefulWidget {
   const GoalsPage({super.key});
@@ -19,6 +21,7 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
   List<Map<String, dynamic>> goals = [];
   bool isLoading = true;
   DateTime selectedDate = DateTime.now();
+  String? username;
 
   // Define which categories are daily goals
   final Set<String> _dailyGoals = {'calories', 'steps', 'protein', 'carbs', 'fats', 'weight'};
@@ -26,7 +29,32 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
   @override
   void initState() {
     super.initState();
+    _fetchUserData();
     _fetchGoals();
+  }
+
+  Future<void> _fetchUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('http://localhost:8000/users/me'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          username = data['name'];
+        });
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
+    }
   }
 
   Future<void> _fetchGoals() async {
@@ -351,7 +379,7 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
   String _getUnitForCategory(String category) {
     switch (category.toLowerCase()) {
       case 'weight':
-        return 'kg';
+        return 'lbs';
       case 'steps':
         return 'steps';
       case 'calories':
@@ -370,7 +398,14 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
       final goalDate = goal['deadline'] as String;
       return _dailyGoals.contains(baseGoalType.toLowerCase()) && 
              goalDate == selectedDateStr;
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        // Weight goals first
+        if (a['goal_type'] == 'weight') return -1;
+        if (b['goal_type'] == 'weight') return 1;
+        // Then sort alphabetically
+        return a['goal_type'].toString().compareTo(b['goal_type'].toString());
+      });
     return filteredGoals;
   }
 
@@ -379,7 +414,7 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
       final baseGoalType = goal['goal_type'].toString().split(':')[0];
       return !_dailyGoals.contains(baseGoalType.toLowerCase());
     }).toList()
-      ..sort((a, b) => a['deadline'].compareTo(b['deadline']));
+      ..sort((a, b) => a['goal_type'].toString().compareTo(b['goal_type'].toString()));
   }
 
   Widget _buildGoalCard(Map<String, dynamic> goal) {
@@ -530,7 +565,7 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
             const SizedBox(height: 12),
             Text(
               isWeight
-                ? 'Current: ${goal['current_value']} kg / Target: ${goal['target_value']} kg'
+                ? 'Current: ${goal['current_value']} lbs / Target: ${goal['target_value']} lbs'
                 : '${goal['current_value']} ${_getUnitForCategory(goal['category'])} / ${goal['target_value']} ${_getUnitForCategory(goal['category'])}',
               style: TextStyle(
                 fontSize: 14,
@@ -559,6 +594,11 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildDateSelector(),
+              GoalRecommendationsCard(
+                onGoalsCreated: () {
+                  _fetchGoals();
+                },
+              ),
               if (dailyGoals.isNotEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
@@ -637,6 +677,13 @@ class _GoalsPageState extends State<GoalsPage> with NavigationMixin {
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          if (username != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: UserProfileMenu(username: username!),
+            ),
+        ],
       ),
       body: isLoading
           ? Center(

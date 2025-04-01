@@ -1,10 +1,10 @@
 from fastapi import FastAPI, Depends
 from app.database import engine
 from app.models import Base
-from app.routes import router, user_routes, workout_routes, exercise_routes, meal_routes, exercise_log_routes
+from app.routes import router
 from fastapi.security import OAuth2PasswordBearer
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import asyncio
 import httpx
 
@@ -12,13 +12,8 @@ app = FastAPI(title="Fitness App", version="1.0")
 
 Base.metadata.create_all(bind=engine)
 
-# Include routers
+# Include main router which includes all other routers
 app.include_router(router)
-app.include_router(user_routes.router)
-app.include_router(workout_routes.router)
-app.include_router(exercise_routes.router)
-app.include_router(meal_routes.router)
-app.include_router(exercise_log_routes.router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +30,8 @@ async def check_daily_goals():
         # Calculate time until next midnight
         midnight = datetime.combine(now.date(), time())
         if now >= midnight:
-            midnight = datetime.combine(now.date().replace(day=now.day + 1), time())
+            # Add one day to get to next midnight
+            midnight = datetime.combine(now.date() + timedelta(days=1), time())
         
         # Wait until midnight
         await asyncio.sleep((midnight - now).total_seconds())

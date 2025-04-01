@@ -14,6 +14,7 @@ class User(Base):
     workouts = relationship("Workout", back_populates="user")
     meals = relationship("Meal", back_populates="user")
     goals = relationship("Goal", back_populates="user")
+    profile = relationship("UserProfile", back_populates="user", uselist=False)
 
 
 class Workout(Base):
@@ -117,3 +118,18 @@ class Goal(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="goals")
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, unique=True)
+    gender = Column(String, nullable=True)  # 'male', 'female', 'other'
+    weight = Column(Float, nullable=True)  # in kg
+    height = Column(Float, nullable=True)  # in cm
+    fitness_level = Column(String, nullable=True)  # 'beginner', 'intermediate', 'advanced'
+    dietary_preferences = Column(String, nullable=True)  # e.g., 'vegetarian', 'vegan', 'keto'
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="profile")

@@ -12,6 +12,7 @@ import 'pages/exerciselog_page.dart';
 import 'pages/fooddetail_page.dart';
 import 'pages/goals_page.dart';
 import 'pages/creategoal_page.dart';
+import 'pages/profile_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -43,6 +44,7 @@ class MyApp extends StatelessWidget {
         '/create-exercise': (context) => CreateExercisePage(),
         '/exercise-log': (context) => const ExerciseLogPage(),
         '/food-details': (context) => const FoodDetailsPage(),
+        '/profile': (context) => const ProfilePage(),
       },
     );
   }

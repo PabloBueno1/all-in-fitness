@@ -17,6 +17,9 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
   late int exerciseId;
   late int setCap;
   late String exerciseName;
+  late String muscles;
+  late String description;
+  late String category;
   final TextEditingController _weightController = TextEditingController();
   final TextEditingController _repsController = TextEditingController();
   final TextEditingController _setsController = TextEditingController(text: '3');  // For new exercises
@@ -34,10 +37,16 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
     if (isNewExercise) {
       exerciseToAdd = args['exerciseToAdd'];
       exerciseName = exerciseToAdd['name'];
+      muscles = exerciseToAdd['muscles'] ?? '';
+      description = exerciseToAdd['description'] ?? '';
+      category = exerciseToAdd['category'] ?? 'Uncategorized';
       _logsFuture = Future.value([]);  // No logs for new exercise
     } else {
       exerciseId = args['exerciseId'];
       exerciseName = args['exerciseName'];
+      muscles = args['muscles'] ?? '';
+      description = args['description'] ?? '';
+      category = args['category'] ?? 'Uncategorized';
       setCap = args['setCap'];
       _logsFuture = _fetchExerciseLogs(workoutId, exerciseId);
     }
@@ -365,75 +374,68 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Material(
-                              type: MaterialType.transparency,
-                              child: Text(
-                                exerciseName,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w600,
-                                  color: CupertinoColors.label,
-                                ),
-                              ),
-                            ),
-                            if (isNewExercise && 
-                                (exerciseToAdd['category']?.toString().isNotEmpty ?? false)) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                "Muscles",
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: CupertinoColors.label,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Material(
-                                type: MaterialType.transparency,
-                                child: Text(
-                                  exerciseToAdd['muscles'],
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    color: CupertinoColors.secondaryLabel,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Material(
+                                  type: MaterialType.transparency,
+                                  child: Text(
+                                    exerciseName,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w600,
+                                      color: CupertinoColors.label,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: kPrimaryBlue.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: Text(
-                            isNewExercise ? "New" : "${setCap} sets",
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: kPrimaryBlue,
-                              fontWeight: FontWeight.w600,
+                                if (category.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Material(
+                                    type: MaterialType.transparency,
+                                    child: Text(
+                                      category,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        color: CupertinoColors.secondaryLabel,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                        ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: kPrimaryBlue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: Text(
+                                isNewExercise ? "New" : "${setCap} sets",
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: kPrimaryBlue,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
               ),
-              if (isNewExercise && 
-                  ((exerciseToAdd['muscles']?.toString().isNotEmpty ?? false) ||
-                   (exerciseToAdd['description']?.toString().isNotEmpty ?? false))) ...[
+              if (muscles.isNotEmpty || description.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
@@ -447,20 +449,23 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if ((exerciseToAdd['muscles'] ?? '').toString().isNotEmpty) ...[
-                          Text(
-                            "Muscles",
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: CupertinoColors.label,
+                        if (muscles.isNotEmpty) ...[
+                          Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              "Muscles",
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: CupertinoColors.label,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Material(
                             type: MaterialType.transparency,
                             child: Text(
-                              exerciseToAdd['muscles'],
+                              muscles,
                               style: const TextStyle(
                                 fontSize: 15,
                                 color: CupertinoColors.secondaryLabel,
@@ -468,22 +473,25 @@ class _ExerciseLogPageState extends State<ExerciseLogPage> {
                             ),
                           ),
                         ],
-                        if ((exerciseToAdd['description'] ?? '').toString().isNotEmpty) ...[
-                          if ((exerciseToAdd['muscles'] ?? '').toString().isNotEmpty)
+                        if (description.isNotEmpty) ...[
+                          if (muscles.isNotEmpty)
                             const SizedBox(height: 12),
-                          Text(
-                            "Description",
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: CupertinoColors.label,
+                          Material(
+                            type: MaterialType.transparency,
+                            child: Text(
+                              "Description",
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: CupertinoColors.label,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 4),
                           Material(
                             type: MaterialType.transparency,
                             child: Text(
-                              exerciseToAdd['description'],
+                              description,
                               style: const TextStyle(
                                 fontSize: 15,
                                 color: CupertinoColors.secondaryLabel,

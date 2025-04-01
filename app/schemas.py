@@ -172,3 +172,34 @@ class GoalProgress(BaseModel):
     current_value: float
     target_value: float
     goal_type: str
+
+class UserProfileBase(BaseModel):
+    gender: Optional[str] = None  # 'male', 'female', 'other'
+    weight: Optional[float] = None  # in kg
+    height: Optional[float] = None  # in cm
+    fitness_level: Optional[str] = None  # 'beginner', 'intermediate', 'advanced'
+    dietary_preferences: Optional[str] = None  # e.g., 'vegetarian', 'vegan', 'keto'
+
+class UserProfileCreate(BaseModel):
+    weight: Optional[float] = None
+    height: Optional[float] = None
+    gender: Optional[str] = None
+    fitness_level: Optional[str] = None
+    dietary_preferences: Optional[str] = None
+    target_weight: Optional[float] = None  # Only used for creating weight goal
+
+class UserProfileUpdate(BaseModel):
+    weight: Optional[float] = None
+    height: Optional[float] = None
+    gender: Optional[str] = None
+    fitness_level: Optional[str] = None
+    dietary_preferences: Optional[str] = None
+
+class UserProfile(UserProfileBase):
+    id: int
+    user_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        orm_mode = True

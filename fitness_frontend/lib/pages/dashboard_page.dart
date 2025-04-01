@@ -8,6 +8,7 @@ import 'dart:ui';
 import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import 'package:flutter/rendering.dart';
+import '../widgets/user_profile_menu.dart';
 
 // iOS-style constants
 const kBackgroundColor = Color(0xFFF2F2F7);
@@ -29,6 +30,7 @@ class _DashboardPageState extends State<DashboardPage>
   Map<String, dynamic> dashboardData = {};
   bool isLoading = true;
   bool _isVisible = true;
+  String? username;
 
   @override
   bool get wantKeepAlive => true;
@@ -37,6 +39,7 @@ class _DashboardPageState extends State<DashboardPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _fetchUserData();
     _fetchDashboardData();
   }
 
@@ -65,6 +68,30 @@ class _DashboardPageState extends State<DashboardPage>
           _fetchDashboardData();
         }
       }
+    }
+  }
+
+  Future<void> _fetchUserData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('token');
+      if (token == null) return;
+
+      final response = await http.get(
+        Uri.parse('http://localhost:8000/users/me'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        setState(() {
+          username = data['name'];
+        });
+      }
+    } catch (e) {
+      print('Error fetching user data: $e');
     }
   }
 
@@ -477,6 +504,19 @@ class _DashboardPageState extends State<DashboardPage>
   Widget _buildDailyGoals() {
     final goals = dashboardData['goals']?['daily'] ?? [];
     
+    // Filter out weightlifting goals but keep weight and nutrient goals
+    final dailyGoals = goals.where((goal) {
+      final type = goal['type'] as String;
+      return type == 'calories' || type == 'protein' || type == 'carbs' || type == 'fats' || type == 'weight';
+    }).toList();
+
+    // Sort goals: weight first, then others alphabetically
+    dailyGoals.sort((a, b) {
+      if (a['type'] == 'weight') return -1;
+      if (b['type'] == 'weight') return 1;
+      return (a['type'] as String).compareTo(b['type'] as String);
+    });
+    
     return _buildCard(
       child: Padding(
         padding: const EdgeInsets.all(kSpacing),
@@ -484,7 +524,7 @@ class _DashboardPageState extends State<DashboardPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildSectionTitle('Daily Goals'),
-            ...goals.map((goal) {
+            ...dailyGoals.map((goal) {
               String unit = '';
               switch(goal['type']) {
                 case 'weight':
@@ -498,45 +538,37 @@ class _DashboardPageState extends State<DashboardPage>
                 case 'calories':
                   unit = ' kcal';
                   break;
-                case 'steps':
-                  unit = '';
-                  break;
               }
 
-              // Handle weight goal differently
+              // Handle weight goals differently (no progress bar)
               if (goal['type'] == 'weight') {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            goal['type'],
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black,
-                            ),
-                          ),
-                          Text(
-                            '${goal['current'].toStringAsFixed(1)}/${goal['target'].toStringAsFixed(1)}$unit',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: kPrimaryBlue,
-                            ),
-                          ),
-                        ],
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        goal['type'],
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black,
+                        ),
                       ),
-                    ),
-                  ],
+                      Text(
+                        '${goal['current'].toStringAsFixed(1)}->${goal['target'].toStringAsFixed(1)}$unit',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: kPrimaryBlue,
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               }
 
-              // Handle other goals with progress bars
+              // Handle nutrient goals with progress bars
               final progress = goal['progress'] as double;
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,12 +616,6 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Future<void> _logout(BuildContext context) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-    Navigator.pushReplacementNamed(context, '/');
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);  // Required by AutomaticKeepAliveClientMixin
@@ -607,10 +633,11 @@ class _DashboardPageState extends State<DashboardPage>
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: kPrimaryBlue),
-            onPressed: () => _logout(context),
-          ),
+          if (username != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: UserProfileMenu(username: username!),
+            ),
         ],
       ),
       body: isLoading

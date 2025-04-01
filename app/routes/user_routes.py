@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, Goal, Meal, Workout, ExerciseLog
-from app.schemas import UserCreate, UserLogin, GoalCreate, GoalUpdate, Goal as GoalSchema, GoalProgress
+from app.models import User, Goal, Meal, Workout, ExerciseLog, UserProfile, ExerciseTypes, Exercise
+from app.schemas import (
+    UserCreate, UserLogin, GoalCreate, GoalUpdate, Goal as GoalSchema, 
+    GoalProgress, UserProfileCreate, UserProfileUpdate, UserProfile as UserProfileSchema
+)
 from app.auth import get_password_hash, verify_password, create_access_token, get_current_user
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import datetime, date, timedelta
 from typing import List
+import math
 
 router = APIRouter()
 
@@ -90,6 +94,12 @@ def create_user_goal(
             start_date=goal.start_date,
             target_date=goal.target_date
         )
+    
+    # If this is a weight goal, update the profile weight
+    if goal.goal_type == 'weight':
+        profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+        if profile:
+            profile.weight = goal.current_value
     
     db.add(db_goal)
     db.commit()
@@ -218,7 +228,17 @@ def update_user_goal(
         raise HTTPException(status_code=404, detail="Goal not found")
     
     # Update only provided fields
-    for field, value in goal_update.dict(exclude_unset=True).items():
+    update_data = goal_update.dict(exclude_unset=True)
+    
+    # If this is a weight goal and current_value is being updated, update the profile weight
+    if goal.goal_type == 'weight' and 'current_value' in update_data:
+        new_weight = update_data['current_value']
+        # Update user profile weight
+        profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+        if profile:
+            profile.weight = new_weight
+    
+    for field, value in update_data.items():
         setattr(goal, field, value)
     
     # For daily goals, ensure target_date stays as today
@@ -428,4 +448,287 @@ def get_dashboard_data(
             "details": workout_details
         },
         "weekly_progress": weekly_progress
+    }
+
+@router.post("/users/profile", response_model=UserProfileSchema)
+def create_user_profile(
+    profile: UserProfileCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Check if profile already exists
+    existing_profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if existing_profile:
+        raise HTTPException(status_code=400, detail="Profile already exists")
+    
+    # Create profile without target_weight
+    profile_data = profile.dict(exclude={'target_weight'})
+    new_profile = UserProfile(**profile_data, user_id=current_user.id)
+    
+    # If weight is provided, create or update today's weight goal
+    if profile.weight is not None:
+        today = date.today()
+        weight_goal = db.query(Goal).filter(
+            Goal.user_id == current_user.id,
+            Goal.goal_type == 'weight',
+            Goal.start_date == today
+        ).first()
+        
+        if weight_goal:
+            weight_goal.current_value = profile.weight  # Only update current_value
+        else:
+            new_weight_goal = Goal(
+                user_id=current_user.id,
+                goal_type='weight',
+                current_value=profile.weight,
+                target_value=profile.target_weight if profile.target_weight is not None else 0.0,  # Use target_weight if provided
+                start_date=today,
+                target_date=today
+            )
+            db.add(new_weight_goal)
+    
+    db.add(new_profile)
+    db.commit()
+    db.refresh(new_profile)
+    return new_profile
+
+@router.get("/users/profile", response_model=UserProfileSchema)
+def get_user_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    return profile
+
+@router.put("/users/profile", response_model=UserProfileSchema)
+def update_user_profile(
+    profile_update: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # Update only the fields that were provided
+    update_data = profile_update.dict(exclude_unset=True)
+    
+    # If weight is being updated, update any active weight goals
+    if 'weight' in update_data:
+        new_weight = update_data['weight']
+        # Update today's weight goal if it exists
+        today = date.today()
+        weight_goal = db.query(Goal).filter(
+            Goal.user_id == current_user.id,
+            Goal.goal_type == 'weight',
+            Goal.start_date == today
+        ).first()
+        
+        if weight_goal:
+            weight_goal.current_value = new_weight  # Only update current_value, not target_value
+    
+    for field, value in update_data.items():
+        setattr(profile, field, value)
+    
+    db.commit()
+    db.refresh(profile)
+    return profile
+
+@router.delete("/users/profile")
+def delete_user_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    db.delete(profile)
+    db.commit()
+    return {"message": "Profile deleted successfully"}
+
+@router.get("/recommendations/goals")
+async def get_goal_recommendations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get personalized goal recommendations based on user profile"""
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="User profile not found")
+
+    # Get current weight goal if it exists
+    current_weight_goal = db.query(Goal).filter(
+        Goal.user_id == current_user.id,
+        Goal.goal_type == 'weight'
+    ).order_by(Goal.start_date.desc()).first()
+
+    # Calculate weight goal timeline
+    if current_weight_goal:
+        current_weight = current_weight_goal.current_value
+        target_weight = current_weight_goal.target_value
+        weight_diff = abs(current_weight - target_weight)
+        # Assuming 1.5-2 lbs per week is healthy weight change
+        weeks_needed = math.ceil(weight_diff / 1.65)  # Using 1.65 lbs/week as average
+        target_date = date.today() + timedelta(weeks=weeks_needed)
+    else:
+        current_weight = profile.weight
+        target_weight = None
+        weeks_needed = 12  # Default 12-week goal
+        target_date = date.today() + timedelta(weeks=weeks_needed)
+
+    # Calculate BMR using Mifflin-St Jeor formula adapted for imperial units
+    # Original formula: (10 * weight_kg) + (6.25 * height_cm) - (5 * age) + s
+    # Converted to imperial: (4.536 * weight_lbs) + (15.875 * height_inches) - (5 * age) + s
+    if profile.gender == 'male':
+        bmr = (4.536 * current_weight) + (15.875 * profile.height) - (5 * 30) + 5  # Assuming age 30 for now
+    else:
+        bmr = (4.536 * current_weight) + (15.875 * profile.height) - (5 * 30) - 161
+
+    # Activity multiplier based on fitness level
+    activity_multiplier = {
+        'beginner': 1.2,     # Sedentary/Light activity
+        'intermediate': 1.375,  # Moderate activity
+        'advanced': 1.55     # Very active
+    }.get(profile.fitness_level, 1.2)
+
+    # Calculate TDEE (Total Daily Energy Expenditure)
+    tdee = bmr * activity_multiplier
+
+    # Adjust calories based on weight goal
+    if current_weight_goal and current_weight and target_weight:
+        if target_weight < current_weight:  # Weight loss
+            base_calories = tdee - 500  # 500 calorie deficit
+        elif target_weight > current_weight:  # Weight gain
+            base_calories = tdee + 500  # 500 calorie surplus
+        else:  # Maintenance
+            base_calories = tdee
+    else:
+        base_calories = tdee
+
+    # Adjust calories based on dietary preferences
+    if profile.dietary_preferences == 'keto':
+        base_calories *= 1.05  # Slight increase for keto
+    elif profile.dietary_preferences == 'vegan':
+        base_calories *= 1.0  # No adjustment needed
+
+    # Calculate macro targets based on weight goal
+    if current_weight_goal and target_weight:
+        if target_weight < current_weight:  # Weight loss
+            protein_per_lb = 1.0  # Higher protein for preservation during cut
+            fat_percentage = 0.25  # Lower fat during cut
+        elif target_weight > current_weight:  # Weight gain
+            protein_per_lb = 0.82  # Moderate protein for bulk
+            fat_percentage = 0.3  # Moderate fat for bulk
+        else:  # Maintenance
+            protein_per_lb = 0.73  # Standard protein
+            fat_percentage = 0.3  # Standard fat
+    else:
+        protein_per_lb = 0.73  # Default to standard
+        fat_percentage = 0.3  # Default to standard
+
+    # Calculate protein (prioritize based on body weight)
+    protein_target = current_weight * protein_per_lb
+
+    # Calculate fat (percentage of total calories)
+    fat_calories = base_calories * fat_percentage
+    fat_target = fat_calories / 9  # 9 calories per gram of fat
+
+    # Calculate carbs (remaining calories)
+    protein_calories = protein_target * 4  # 4 calories per gram of protein
+    carb_calories = base_calories - protein_calories - fat_calories
+    carb_target = max(0, carb_calories / 4)  # 4 calories per gram of carbs, ensure non-negative
+
+    # Get weightlifting goals and progress
+    weightlifting_recommendations = []
+    
+    # Get user's recent exercise history (last 7 days)
+    recent_date = date.today() - timedelta(days=7)
+    exercise_history = (
+        db.query(Exercise, ExerciseLog)
+        .join(ExerciseLog)
+        .join(Workout)
+        .filter(
+            Workout.user_id == current_user.id,
+            Workout.date >= recent_date
+        )
+        .order_by(Workout.date.desc())
+        .all()
+    )
+
+    # Create a map of exercise type to max weight and last performed date
+    exercise_stats = {}
+    for exercise, log in exercise_history:
+        exercise_name = exercise.exercise_type.name
+        if exercise_name not in exercise_stats:
+            exercise_stats[exercise_name] = {
+                'max_weight': log.weight,
+                'last_date': exercise.workout.date,
+                'muscles': exercise.exercise_type.muscles
+            }
+        elif log.weight > exercise_stats[exercise_name]['max_weight']:
+            exercise_stats[exercise_name]['max_weight'] = log.weight
+        if exercise.workout.date > exercise_stats[exercise_name]['last_date']:
+            exercise_stats[exercise_name]['last_date'] = exercise.workout.date
+
+    # Generate weightlifting recommendations for each recently performed exercise
+    for exercise_name, stats in exercise_stats.items():
+        current_max = stats['max_weight']
+        days_since_last = (date.today() - stats['last_date']).days
+        
+        # Calculate target based on fitness level
+        if profile.fitness_level == 'beginner':
+            target = current_max * 1.2  # 20% increase for beginners
+            timeframe = "8 weeks"
+        elif profile.fitness_level == 'intermediate':
+            target = current_max * 1.15  # 15% increase
+            timeframe = "12 weeks"
+        else:  # advanced
+            target = current_max * 1.1  # 10% increase
+            timeframe = "16 weeks"
+
+        # Add frequency recommendation based on days since last performed
+        if days_since_last <= 2:
+            frequency = "2-3 times per week"
+        elif days_since_last <= 4:
+            frequency = "1-2 times per week"
+        else:
+            frequency = "1 time per week"
+
+        weightlifting_recommendations.append({
+            "exercise_name": exercise_name,
+            "current_max": current_max,
+            "target_weight": round(target),
+            "timeframe": timeframe,
+            "frequency": frequency,
+            "muscles_targeted": stats['muscles'],
+            "days_since_last": days_since_last
+        })
+
+    return {
+        "weight_goal": {
+            "current_weight": current_weight,
+            "target_weight": target_weight,
+            "target_date": target_date,
+            "weekly_change": 1.65,  # lbs per week
+            "weeks_needed": weeks_needed,
+        },
+        "calorie_goal": {
+            "daily_target": round(base_calories),
+            "protein_target": round(protein_target),
+            "carb_target": round(carb_target),
+            "fat_target": round(fat_target),
+        },
+        "weightlifting_goals": weightlifting_recommendations,
+        "recommendations": [
+            f"Based on your {profile.fitness_level} fitness level and {profile.dietary_preferences} diet, we recommend:",
+            f"- Daily calorie target: {round(base_calories)} calories",
+            f"- Protein: {round(protein_target)}g ({round(protein_target * 4)} calories)",
+            f"- Carbs: {round(carb_target)}g ({round(carb_target * 4)} calories)",
+            f"- Fat: {round(fat_target)}g ({round(fat_target * 9)} calories)",
+            f"- Expected timeline: {weeks_needed} weeks to reach your weight goal",
+            f"- Weekly weight change: 1.65 lbs"
+        ]
     }
