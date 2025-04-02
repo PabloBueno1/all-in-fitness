@@ -1,4 +1,3 @@
-
 services:
   db:
     image: postgres:16
@@ -23,12 +22,26 @@ services:
       - .:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
   
-  flutter_frontend:
+  flutter_web:
     build: ./fitness_frontend
     ports:
       - "8080:8080"
     depends_on:
       - backend
+    command: flutter run -d web-server --web-hostname=0.0.0.0 --web-port=8080
+
+  # flutter_mobile:
+  #   build: ./fitness_frontend
+  #   ports:
+  #     - "8081:8081"
+  #   depends_on:
+  #     - backend
+  #   # Uncomment the following lines if you want to use a physical device via USB
+  #   # volumes:
+  #   #   - /dev/bus/usb:/dev/bus/usb
+  #   environment:
+  #     - FLUTTER_DEVICE=emulator-5554
+  #   command: flutter run -d emulator-5554
 
 volumes:
   pgdata:
