@@ -8,6 +8,7 @@ import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import '../constants/colors.dart';
 import '../widgets/user_profile_menu.dart';
+import '../widgets/workout_recommendations_card.dart';
 
 class WorkoutsPage extends StatefulWidget {
   const WorkoutsPage({super.key});
@@ -80,10 +81,6 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
           };
         }).toList();
       });
-
-      for (var workout in workouts) {
-        _fetchWorkoutExercises(workout['id']);
-      }
     } else {
       print("Failed to fetch workouts: ${response.statusCode}");
     }
@@ -208,29 +205,14 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
 
     if (response.statusCode == 200) {
       List decodedResponse = json.decode(response.body);
-      // Add exercise type details to each exercise
-      List enrichedExercises = [];
-      for (var exercise in decodedResponse) {
-        final exerciseTypeResponse = await http.get(
-          Uri.parse('http://localhost:8000/exercise_types/${exercise['exercise_id']}'),
-          headers: {'Authorization': 'Bearer $token'},
-        );
-        
-        if (exerciseTypeResponse.statusCode == 200) {
-          final exerciseType = json.decode(exerciseTypeResponse.body);
-          enrichedExercises.add({
-            ...exercise,
-            'muscles': exerciseType['muscles'],
-            'description': exerciseType['description'],
-            'category': exerciseType['category'],
-          });
-        } else {
-          enrichedExercises.add(exercise);
-        }
-      }
-      
+      // Just use the exercise data as is, without fetching additional details
       setState(() {
-        workoutExercises[workoutId] = enrichedExercises;
+        workoutExercises[workoutId] = decodedResponse.map((exercise) => {
+          ...exercise,
+          'muscles': exercise['muscles'] ?? 'Not specified',
+          'description': exercise['description'] ?? 'No description available',
+          'category': exercise['category'] ?? 'Uncategorized',
+        }).toList();
       });
     } else {
       setState(() {
@@ -528,6 +510,7 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
       body: SafeArea(
         child: Column(
           children: [
+            const WorkoutRecommendationsCard(),
             Expanded(
               child: ListView.builder(
                 itemCount: workouts.length,
@@ -551,6 +534,11 @@ class _WorkoutsPageState extends State<WorkoutsPage> with NavigationMixin {
                     child: Theme(
                       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                       child: ExpansionTile(
+                        onExpansionChanged: (expanded) {
+                          if (expanded && !(workoutExercises[workoutId]?.isNotEmpty ?? false)) {
+                            _fetchWorkoutExercises(workoutId);
+                          }
+                        },
                         title: Row(
                           children: [
                             Icon(CupertinoIcons.sportscourt,

@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, Workout, Exercise, ExerciseLog
+from app.models import User, Workout, Exercise, ExerciseLog, ExerciseTypes, UserProfile
 from app.schemas import WorkoutCreate, WorkoutResponse, WorkoutUpdate
 from app.auth import get_current_user
+from app.gpt_service import GPTService
+from sqlalchemy import func
+from datetime import datetime, timedelta
+from typing import List, Dict
 
 router = APIRouter()
 
@@ -131,4 +135,72 @@ def update_workout(
     except Exception as e:
         db.rollback()
         print(f"Error updating workout: {e}")
-        raise HTTPException(status_code=500, detail="Error updating workout") 
+        raise HTTPException(status_code=500, detail="Error updating workout")
+
+@router.get("/workouts/recommendations")
+async def get_workout_recommendations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get AI-generated workout recommendations based on user's profile and workout history."""
+    try:
+        # Get user's fitness level from profile
+        user_profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+        if not user_profile or not user_profile.fitness_level:
+            raise HTTPException(status_code=400, detail="User profile or fitness level not set")
+
+        # Get recent workouts (last 7 days)
+        recent_date = datetime.now() - timedelta(days=7)
+        recent_workouts = []
+        
+        workouts = (
+            db.query(Workout)
+            .filter(Workout.user_id == current_user.id, Workout.date >= recent_date)
+            .all()
+        )
+
+        for workout in workouts:
+            exercises = []
+            for exercise in workout.exercises:
+                exercise_type = db.query(ExerciseTypes).filter(ExerciseTypes.id == exercise.exercise_id).first()
+                if exercise_type:
+                    exercises.append({
+                        'name': exercise_type.name,
+                        'muscles': exercise_type.muscles,
+                        'category': exercise_type.category,
+                        'sets': exercise.sets
+                    })
+            
+            recent_workouts.append({
+                'id': workout.id,
+                'name': workout.name,
+                'date': workout.date,
+                'duration': workout.duration,
+                'exercises': exercises
+            })
+
+        # Calculate typical workout duration (average of last 7 days)
+        typical_duration = 60  # default
+        if workouts:
+            typical_duration = int(sum(w.duration for w in workouts) / len(workouts))
+
+        # Get workout recommendations from GPT service
+        recommendations = await GPTService.generate_workout_recommendations(
+            fitness_level=user_profile.fitness_level,
+            recent_workouts=recent_workouts,
+            typical_duration=typical_duration
+        )
+
+        return {
+            "success": True,
+            "data": recommendations
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Error generating workout recommendations: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate workout recommendations"
+        ) 

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User, Goal, Meal, Workout, ExerciseLog, UserProfile, ExerciseTypes, Exercise
@@ -11,6 +11,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from datetime import datetime, date, timedelta
 from typing import List
 import math
+import pytz
 
 router = APIRouter()
 
@@ -348,22 +349,42 @@ def get_weekly_progress(
 
 @router.get("/users/dashboard")
 def get_dashboard_data(
+    timezone: str = Query(default="UTC", description="Client timezone or UTC offset"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get comprehensive dashboard data including meals, goals, and workouts"""
-    today = date.today()
+    # Handle both timezone names and UTC offsets
+    if timezone.startswith('UTC'):
+        try:
+            # Parse UTC offset (e.g., UTC+4, UTC-5)
+            offset_str = timezone[3:]  # Remove 'UTC'
+            offset_hours = int(offset_str)
+            local_now = datetime.now() + timedelta(hours=offset_hours)
+            local_date = local_now.date()
+        except ValueError:
+            # If parsing fails, default to UTC
+            local_date = date.today()
+    else:
+        try:
+            # Try to use timezone name
+            tz = pytz.timezone(timezone)
+            local_now = datetime.now(tz)
+            local_date = local_now.date()
+        except pytz.exceptions.UnknownTimeZoneError:
+            # If timezone is invalid, default to UTC
+            local_date = date.today()
     
-    # Get today's goals
+    # Get today's goals using local date
     today_goals = db.query(Goal).filter(
         Goal.user_id == current_user.id,
-        Goal.start_date == today
+        Goal.start_date == local_date
     ).all()
     
-    # Get today's meals with their food items
+    # Get today's meals with their food items using local date
     today_meals = db.query(Meal).filter(
         Meal.user_id == current_user.id,
-        Meal.date == today
+        Meal.date == local_date
     ).all()
     
     # Calculate total nutrition from meals
@@ -381,10 +402,10 @@ def get_dashboard_data(
             total_carbs += food_item.carbs * quantity
             total_fats += food_item.fats * quantity
     
-    # Get today's workouts
+    # Get today's workouts using local date
     today_workouts = db.query(Workout).filter(
         Workout.user_id == current_user.id,
-        Workout.date == today
+        Workout.date == local_date
     ).all()
     
     # Calculate total workout duration and exercises

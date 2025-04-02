@@ -103,8 +103,13 @@ class _DashboardPageState extends State<DashboardPage>
     String token = prefs.getString('token') ?? '';
 
     try {
+      // Get local timezone
+      final now = DateTime.now();
+      final timezoneOffset = now.timeZoneOffset.inHours;
+      final timezoneString = 'UTC${timezoneOffset >= 0 ? '+' : ''}$timezoneOffset';
+      
       final response = await http.get(
-        Uri.parse('http://localhost:8000/users/dashboard'),
+        Uri.parse('http://localhost:8000/users/dashboard?timezone=$timezoneString'),
         headers: {'Authorization': 'Bearer $token'},
       );
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models import User, Meal, MealFoodItem, FoodItem, Goal
+from app.models import User, Meal, MealFoodItem, FoodItem, Goal, UserProfile
 from app.schemas import (
     MealCreate, MealResponse,
     MealFoodItemCreate, MealFoodItemResponse,
@@ -10,6 +10,7 @@ from app.schemas import (
 )
 from app.auth import get_current_user
 from datetime import date
+from app.gpt_service import GPTService
 
 router = APIRouter()
 
@@ -272,4 +273,76 @@ def update_meal(
     except Exception as e:
         db.rollback()
         print(f"Error updating meal: {e}")
-        raise HTTPException(status_code=500, detail="Error updating meal") 
+        raise HTTPException(status_code=500, detail="Error updating meal")
+
+@router.get("/meals/recommendations")
+async def get_meal_recommendations(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get AI-powered meal recommendations based on remaining daily goals"""
+    today = date.today()
+    
+    # Get today's goals and consumed nutrients
+    daily_goals = db.query(Goal).filter(
+        Goal.user_id == current_user.id,
+        Goal.start_date == today,
+        Goal.goal_type.in_(['calories', 'protein', 'carbs', 'fats'])
+    ).all()
+    
+    # Get today's meals to calculate remaining macros
+    today_meals = db.query(Meal).filter(
+        Meal.user_id == current_user.id,
+        Meal.date == today
+    ).all()
+    
+    # Calculate consumed nutrients
+    consumed = {
+        'calories': 0.0,
+        'protein': 0.0,
+        'carbs': 0.0,
+        'fats': 0.0
+    }
+    
+    for meal in today_meals:
+        for meal_food in meal.meal_food_items:
+            food_item = meal_food.food_item
+            quantity = meal_food.quantity
+            consumed['calories'] += food_item.calories * quantity
+            consumed['protein'] += food_item.protein * quantity
+            consumed['carbs'] += food_item.carbs * quantity
+            consumed['fats'] += food_item.fats * quantity
+    
+    # Create a map of goal types to target values
+    goal_targets = {
+        goal.goal_type: goal.target_value
+        for goal in daily_goals
+    }
+    
+    # Calculate remaining macros
+    remaining = {
+        'calories': goal_targets.get('calories', 2000) - consumed['calories'],
+        'protein': goal_targets.get('protein', 150) - consumed['protein'],
+        'carbs': goal_targets.get('carbs', 250) - consumed['carbs'],
+        'fats': goal_targets.get('fats', 65) - consumed['fats']
+    }
+    
+    # Get user's dietary preferences and allergies from profile
+    profile = db.query(UserProfile).filter(UserProfile.user_id == current_user.id).first()
+    dietary_preferences = [profile.dietary_preferences] if profile and profile.dietary_preferences else []
+    allergies = []  # No allergies field in profile, using empty list
+    
+    # Get meal recommendations from GPT service
+    recommendations = await GPTService.generate_meal_recommendations(
+        remaining_calories=max(0, remaining['calories']),
+        remaining_protein=max(0, remaining['protein']),
+        remaining_carbs=max(0, remaining['carbs']),
+        remaining_fats=max(0, remaining['fats']),
+        dietary_preferences=dietary_preferences,
+        allergies=allergies
+    )
+    
+    return {
+        "remaining_macros": remaining,
+        "recommendations": recommendations
+    } 

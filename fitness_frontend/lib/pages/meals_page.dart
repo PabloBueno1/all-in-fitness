@@ -8,6 +8,7 @@ import '../widgets/bottom_nav_bar.dart';
 import '../mixins/navigation_mixin.dart';
 import '../constants/colors.dart';
 import '../widgets/user_profile_menu.dart';
+import '../widgets/meal_recommendations_card.dart';  // Add this import
 
 class MealsPage extends StatefulWidget {
   const MealsPage({super.key});
@@ -501,6 +502,7 @@ class _MealsPageState extends State<MealsPage> with NavigationMixin {
       ),
       body: Column(
         children: [
+          const MealRecommendationsCard(),
           Expanded(
             child: ListView.builder(
               itemCount: meals.length,

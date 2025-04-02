@@ -10,3 +10,5 @@ fastapi-users
 requests
 python-dotenv
 httpx
+openai
+pytz
